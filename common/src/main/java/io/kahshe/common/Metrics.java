@@ -1,7 +1,12 @@
 package io.kahshe.common;
 
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 /**
  * Hand-rolled Prometheus-text metrics, with no client library. Everything kahshe knows about
@@ -30,6 +35,13 @@ public final class Metrics {
   public final LongAdder authCacheHits = new LongAdder();
   public final LongAdder authCacheMisses = new LongAdder();
   public final LongAdder authRejected = new LongAdder();
+  /**
+   * Admin-port requests refused for a missing or wrong {@code KAHSHE_ADMIN_TOKEN}. Kept apart from
+   * {@link #authRejected}, which relays the backend's verdict on the data plane: this one is
+   * kahshe's own, and a rising value with every scraper configured is something else probing the
+   * metrics port.
+   */
+  public final LongAdder adminAuthRejected = new LongAdder();
   public final LongAdder errors = new LongAdder();
   public final LongAdder indexBuilds = new LongAdder();
   public final LongAdder indexBuildFailures = new LongAdder();
@@ -226,8 +238,9 @@ public final class Metrics {
    * type was handed, and how many it kept.
    *
    * <p>Labelled because the types are a ServiceLoader seam — a deployment can carry one nobody
-   * here has named — so a fixed field per tier would be wrong the day someone adds one. These are
-   * the only labelled counters in this class; the label is the type's own key.
+   * here has named — so a fixed field per tier would be wrong the day someone adds one. The key
+   * is the type's own name and the label is applied at scrape; the per-table maps below carry
+   * their whole label set in the key instead, via {@link #labels}.
    *
    * <p>{@code planFilesTotal} and {@code planFilesKept} are recorded ONCE per plan, so they cannot
    * say which tier did the pruning or whether a second predicate narrowed anything; these can.
@@ -244,6 +257,78 @@ public final class Metrics {
     pruneFilesKept.computeIfAbsent(tier, k -> new LongAdder()).add(kept);
   }
 
+  /**
+   * The per-table families. Every other {@code kahshe_index_*} and {@code kahshe_plan_*} series
+   * is a fleet aggregate, which cannot say which table is behind, which column's builds eat the
+   * indexer, or whose queries prune nothing; these are keyed by a {@link #labels} set so a map
+   * can carry as many labels as its series needs.
+   *
+   * <p>The table label is {@code namespace.table} and never the prefix: a prefix can carry
+   * tenancy, and the scrape is readable by anyone who reaches the admin port.
+   */
+  public final ConcurrentHashMap<String, LongAdder> tableIndexBuilds = new ConcurrentHashMap<>();
+
+  /**
+   * Build wall time per (table, column), held in milliseconds and emitted as
+   * {@code _seconds_total} to millisecond precision. Whole seconds per publish would add 0 for
+   * every sub-second build, and a fleet of small tables builds in well under one.
+   */
+  public final ConcurrentHashMap<String, LongAdder> tableIndexBuildMillis = new ConcurrentHashMap<>();
+
+  public final ConcurrentHashMap<String, LongAdder> tablePlanRequests = new ConcurrentHashMap<>();
+  public final ConcurrentHashMap<String, LongAdder> tablePlanFilesKept = new ConcurrentHashMap<>();
+
+  /**
+   * Seconds each table has been behind, by {@code namespace.table}, read at scrape. Installed by
+   * whoever tracks freshness, like the gauges above; the empty default emits no series at all,
+   * which is the truth for a process that tracks nothing.
+   */
+  public volatile Supplier<Map<String, Long>> indexBehindByTable = Map::of;
+
+  /** Records one publish of a column's index: which kind of build, and its wall time. */
+  public void indexPublished(String table, String column, String kind, long elapsedMs) {
+    tableIndexBuilds
+        .computeIfAbsent(labels("table", table, "column", column, "kind", kind), k -> new LongAdder())
+        .increment();
+    tableIndexBuildMillis
+        .computeIfAbsent(labels("table", table, "column", column), k -> new LongAdder())
+        .add(elapsedMs);
+  }
+
+  /** Records one served plan against its table. */
+  public void planServed(String table, int filesKept) {
+    String key = labels("table", table);
+    tablePlanRequests.computeIfAbsent(key, k -> new LongAdder()).increment();
+    tablePlanFilesKept.computeIfAbsent(key, k -> new LongAdder()).add(filesKept);
+  }
+
+  /**
+   * A label set as the exposition format writes it, {@code k="v",k="v"}, in the order given.
+   * Values are escaped, since a table name is whoever created the table's to choose.
+   */
+  public static String labels(String... keyValues) {
+    if (keyValues.length % 2 != 0) {
+      throw new IllegalArgumentException("labels come in key/value pairs");
+    }
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < keyValues.length; i += 2) {
+      if (i > 0) {
+        sb.append(',');
+      }
+      sb.append(keyValues[i]).append("=\"");
+      for (char c : keyValues[i + 1].toCharArray()) {
+        switch (c) {
+          case '\\' -> sb.append("\\\\");
+          case '"' -> sb.append("\\\"");
+          case '\n' -> sb.append("\\n");
+          default -> sb.append(c);
+        }
+      }
+      sb.append('"');
+    }
+    return sb.toString();
+  }
+
   public String scrape() {
     StringBuilder sb = new StringBuilder();
     counter(sb, "kahshe_passthrough_requests_total", passthroughRequests);
@@ -254,15 +339,20 @@ public final class Metrics {
     counter(sb, "kahshe_plan_files_kept_total", planFilesKept);
     labelled(sb, "kahshe_prune_files_in_total", "tier", pruneFilesIn);
     labelled(sb, "kahshe_prune_files_kept_total", "tier", pruneFilesKept);
+    labelled(sb, "kahshe_table_plan_requests_total", tablePlanRequests);
+    labelled(sb, "kahshe_table_plan_files_kept_total", tablePlanFilesKept);
     counter(sb, "kahshe_plan_tasks_with_stats_total", planTasksWithStats);
     counter(sb, "kahshe_plan_cache_hits_total", planCacheHits);
     counter(sb, "kahshe_plan_cache_misses_total", planCacheMisses);
     counter(sb, "kahshe_auth_cache_hits_total", authCacheHits);
     counter(sb, "kahshe_auth_cache_misses_total", authCacheMisses);
     counter(sb, "kahshe_auth_rejected_total", authRejected);
+    counter(sb, "kahshe_admin_auth_rejected_total", adminAuthRejected);
     counter(sb, "kahshe_errors_total", errors);
     counter(sb, "kahshe_index_builds_total", indexBuilds);
     counter(sb, "kahshe_index_build_failures_total", indexBuildFailures);
+    labelled(sb, "kahshe_table_index_builds_total", tableIndexBuilds);
+    labelledSeconds(sb, "kahshe_table_index_build_seconds_total", tableIndexBuildMillis);
     counter(sb, "kahshe_indexer_jobs_dropped_total", indexerJobsDropped);
     counter(sb, "kahshe_index_lease_skips_total", indexLeaseSkips);
     counter(sb, "kahshe_watch_window_trips_total", watchWindowTrips);
@@ -313,6 +403,7 @@ public final class Metrics {
     gauge(sb, "kahshe_index_tables_tracked", indexTablesTracked.getAsLong());
     gauge(sb, "kahshe_index_tables_behind", indexTablesBehind.getAsLong());
     gauge(sb, "kahshe_index_max_behind_seconds", indexMaxBehindSeconds.getAsLong());
+    labelledGauge(sb, "kahshe_index_behind_seconds", "table", indexBehindByTable.get());
     gauge(sb, "kahshe_index_last_build_age_seconds", indexLastBuildAgeSeconds.getAsLong());
     gauge(sb, "kahshe_index_dead_ordinal_percent", indexDeadOrdinalPercent.getAsLong());
     gauge(sb, "kahshe_index_bloom_leaves", indexBloomLeaves.getAsLong());
@@ -336,15 +427,52 @@ public final class Metrics {
    * Prometheus parser expects of a metric family with no series yet.
    */
   private static void labelled(StringBuilder sb, String name, String label,
-      java.util.Map<String, LongAdder> values) {
+      Map<String, LongAdder> values) {
     if (values.isEmpty()) {
       return;
     }
     sb.append("# TYPE ").append(name).append(" counter\n");
-    for (String key : new java.util.TreeSet<>(values.keySet())) {
-      sb.append(name).append('{').append(label).append("=\"").append(key).append("\"} ")
-          .append(values.get(key).sum()).append('\n');
+    for (Map.Entry<String, LongAdder> e : new TreeMap<>(values).entrySet()) {
+      series(sb, name, labels(label, e.getKey()), Long.toString(e.getValue().sum()));
     }
+  }
+
+  /** As above, for a map whose keys are whole {@link #labels} sets. */
+  private static void labelled(StringBuilder sb, String name, Map<String, LongAdder> values) {
+    if (values.isEmpty()) {
+      return;
+    }
+    sb.append("# TYPE ").append(name).append(" counter\n");
+    for (Map.Entry<String, LongAdder> e : new TreeMap<>(values).entrySet()) {
+      series(sb, name, e.getKey(), Long.toString(e.getValue().sum()));
+    }
+  }
+
+  /** A millisecond map written as seconds to three places: Prometheus's unit, nothing rounded off. */
+  private static void labelledSeconds(StringBuilder sb, String name, Map<String, LongAdder> millis) {
+    if (millis.isEmpty()) {
+      return;
+    }
+    sb.append("# TYPE ").append(name).append(" counter\n");
+    for (Map.Entry<String, LongAdder> e : new TreeMap<>(millis).entrySet()) {
+      long ms = Math.max(0, e.getValue().sum());
+      series(sb, name, e.getKey(), String.format(Locale.ROOT, "%d.%03d", ms / 1000, ms % 1000));
+    }
+  }
+
+  private static void labelledGauge(StringBuilder sb, String name, String label,
+      Map<String, Long> values) {
+    if (values.isEmpty()) {
+      return;
+    }
+    sb.append("# TYPE ").append(name).append(" gauge\n");
+    for (Map.Entry<String, Long> e : new TreeMap<>(values).entrySet()) {
+      series(sb, name, labels(label, e.getKey()), Long.toString(e.getValue()));
+    }
+  }
+
+  private static void series(StringBuilder sb, String name, String labels, String value) {
+    sb.append(name).append('{').append(labels).append("} ").append(value).append('\n');
   }
 
   private static void gauge(StringBuilder sb, String name, long value) {

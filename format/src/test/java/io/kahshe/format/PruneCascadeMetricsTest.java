@@ -58,16 +58,33 @@ class PruneCascadeMetricsTest {
     assertFalse(scrape.contains("kahshe_prune_files_kept_total"), scrape);
   }
 
+  /**
+   * Every family populated, the multi-label and fractional ones included, so the shape check
+   * covers the whole exposition and not only the tier counters: each series line names a family
+   * whose TYPE line came just before it (no family split, none missing), with labels in the
+   * escaped form and a value a parser accepts.
+   */
   @Test
   void everyLineOfTheScrapeIsWellFormed() {
     Metrics metrics = new Metrics();
     metrics.prunePass("term", 10, 1);
+    metrics.indexPublished("ns.t", "msg", "full", 1_234);
+    metrics.planServed("ns.t", 3);
+    metrics.indexBehindByTable = () -> java.util.Map.of("ns.t", 5L, "a\"b\\c\nd", 1L);
+    String family = null;
     for (String line : metrics.scrape().split("\n")) {
-      if (line.isBlank() || line.startsWith("#")) {
+      if (line.isBlank()) {
         continue;
       }
-      assertTrue(line.matches("^[a-z_]+(\\{[a-z_]+=\"[^\"]+\"\\})? -?\\d+$"),
+      if (line.startsWith("# TYPE ")) {
+        family = line.split(" ")[2];
+        continue;
+      }
+      assertTrue(line.matches(
+          "^[a-z_]+(\\{[a-z_]+=\"(?:[^\"\\\\]|\\\\.)*\"(,[a-z_]+=\"(?:[^\"\\\\]|\\\\.)*\")*\\})? -?\\d+(\\.\\d+)?$"),
           "a scrape line a parser would reject: " + line);
+      assertEquals(family, line.replaceAll("[{ ].*$", ""),
+          "a series under another family's TYPE line: " + line);
     }
   }
 

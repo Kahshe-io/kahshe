@@ -190,6 +190,8 @@ verification stays on.
 | `KAHSHE_WORKER_THREADS` | 32 | data-plane pool size (bounded queue of 256 behind it) |
 | `KAHSHE_MAX_BODY_BYTES` | 16 MiB | request body cap (413 above it) |
 | `KAHSHE_MODE` | both | `proxy`, `watch`, or `both`. See [OPERATIONS.md](OPERATIONS.md#4-deployment-shapes) |
+| `KAHSHE_ADMIN_BIND` | 0.0.0.0 | the address the admin port binds. Every interface by default, which is what it always did; **`127.0.0.1` or the pod's own IP is the production value**, so `/metrics` is reachable by the collector and nothing else. Kubelet probes reach a pod by its IP, so on Kubernetes that means the pod IP (the chart's `admin.bind: podIP`), not loopback. A name that does not resolve fails startup naming the variable |
+| `KAHSHE_LOG_FORMAT` | text | how log lines are written, on stderr either way. `text` is the line a person reads: timestamp, thread, level, logger, message, then the stack. `json` is one object per line — `ts` (ISO-8601 UTC, millis), `level`, `logger`, `thread`, `msg`, and `exception` (`class`, `message`, `stack` as one string) when there is one, in that order — for a collector that indexes fields rather than greps them. Any other value (`JSON` included: lowercase) is refused at startup naming the variable — logback would attach no appender for it and the process would run and log nothing — and the chart refuses to render one |
 
 ### Authorization and disclosure
 
@@ -198,6 +200,7 @@ verification stays on.
 | `KAHSHE_AUTH_CACHE_TTL_MS` | 60000 | caller-authorization cache TTL, capped at token expiry |
 | `KAHSHE_PLANNING_IDENTITY` | service | `caller` plans and counts under the caller's own token, so backend authorization applies to every metadata read |
 | `KAHSHE_PLAN_STATS` | strip | whether a plan response carries per-file column statistics: `strip` returns none, `requested` returns those of the columns the request names in `stats-fields` and no others. A table overrides it with `kahshe.plan-stats`. Disclosure traded for scan speed: without them Trino decodes every page of every kept file, ~1.3 ms per file on the lab cluster, which only shows when nothing prunes |
+| `KAHSHE_ADMIN_TOKEN` | — | bearer the admin port requires on every path but `/healthz` and `/readyz`: a missing or wrong `Authorization: Bearer` answers 401 with a `WWW-Authenticate` challenge, before an unknown path is a 404, and counts on `kahshe_admin_auth_rejected_total`. Compared in constant time as SHA-256 digests, so the process holds a hash of the secret rather than the secret. Unset leaves the port open, as it always was, and startup says so at WARN. The probes stay open whatever is set: a kubelet cannot easily carry a bearer, and a health endpoint that needs a secret fails closed for the wrong reason |
 
 ### Correctness and caching
 

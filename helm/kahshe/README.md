@@ -50,7 +50,7 @@ exception is `tls.certManager.enabled`, where the chart's `Certificate` has cert
 | --- | --- | --- |
 | `ServiceAccount` | `serviceAccount.create` (default **on**) | kahshe asks the API server for nothing, so this exists to be **annotated**: IRSA on EKS and Workload Identity on GKE both bind a cloud role to a service account. Without one, an S3 index root needs a static access key in a Secret. `automountServiceAccountToken` is off, since nothing here talks to the API |
 | `Certificate` (cert-manager) | `tls.certManager.enabled` | cert-manager issues and renews into `tls.secretName`, which the pods mount. Because kahshe re-reads its certificate while running, a renewal needs no restart and no rollout. Defaults to PKCS#8 and the in-cluster Service names |
-| `ServiceMonitor` (Prometheus Operator) | `metrics.serviceMonitor.enabled` | Scrapes `/metrics` on the admin port. Its `scheme` follows `tls.admin`, because scraping the wrong protocol fails every scrape |
+| `ServiceMonitor` (Prometheus Operator) | `metrics.serviceMonitor.enabled` | Scrapes `/metrics` on the admin port. Its `scheme` follows `tls.admin`, because scraping the wrong protocol fails every scrape, and it presents the bearer from `admin.tokenSecret` when one is set |
 | `Ingress` | `ingress.enabled` | For engines OUTSIDE the cluster; in-cluster ones reach the Service directly |
 | `HorizontalPodAutoscaler` | `proxy.autoscaling.enabled` | Scales the serving role — see the constraint below, which the chart enforces |
 | `NetworkPolicy` | `networkPolicy.enabled` | Restricts who may reach the data plane |

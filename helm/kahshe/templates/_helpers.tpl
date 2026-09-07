@@ -65,6 +65,29 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .termBuildMaxSpillBytes | int64 | quote }}
 {{- end -}}
 
+{{/* The process-shaped settings every role shares: how it logs, and where and behind what its
+     admin port listens. One place, so a token set for the proxy guards the indexer and the
+     watcher too — they expose the same port. */}}
+{{- define "kahshe.processEnv" -}}
+{{- if not (has .Values.logging.format (list "text" "json")) }}
+{{- fail (printf "logging.format must be text or json, not %v: the process refuses anything else at startup." .Values.logging.format) }}
+{{- end }}
+- name: KAHSHE_LOG_FORMAT
+  value: {{ .Values.logging.format | quote }}
+- name: KAHSHE_ADMIN_BIND
+{{- if eq .Values.admin.bind "podIP" }}
+  valueFrom:
+    fieldRef: { fieldPath: status.podIP }
+{{- else }}
+  value: {{ .Values.admin.bind | quote }}
+{{- end }}
+{{- if .Values.admin.tokenSecret }}
+- name: KAHSHE_ADMIN_TOKEN
+  valueFrom:
+    secretKeyRef: { name: {{ .Values.admin.tokenSecret }}, key: {{ .Values.admin.tokenKey }} }
+{{- end }}
+{{- end -}}
+
 {{/* Extra KAHSHE_* settings from a map. */}}
 {{- define "kahshe.extraEnv" -}}
 {{- range $k, $v := . }}

@@ -175,4 +175,34 @@ class IndexFreshnessTest {
     assertEquals(0, wired.indexTablesBehind.getAsLong());
     assertEquals(0, wired.indexMaxBehindSeconds.getAsLong());
   }
+
+  @Test
+  void thePerTableGaugeListsOnlyWhatIsBehindByDecodedName() {
+    String key = "p|logs%1Fweb|events%20raw";
+    freshness.observed(key, 5);
+    freshness.built(key, 5, 5);
+    assertEquals(java.util.Map.of(), metrics.indexBehindByTable.get(), "current: no line at all");
+
+    clock.addAndGet(2_500);
+    freshness.observed(key, 9);
+    assertEquals(java.util.Map.of("logs.web.events raw", 1L), metrics.indexBehindByTable.get(),
+        "just behind: at least 1, keyed namespace.table, prefix dropped, segments decoded");
+    clock.addAndGet(60_000);
+    assertEquals(60L, metrics.indexBehindByTable.get().get("logs.web.events raw"));
+    assertTrue(
+        metrics.scrape().contains("kahshe_index_behind_seconds{table=\"logs.web.events raw\"} 60"),
+        metrics.scrape());
+
+    freshness.built(key, 9, 9);
+    assertEquals(java.util.Map.of(), metrics.indexBehindByTable.get(), "caught up: gone again");
+  }
+
+  @Test
+  void aProcessThatDoesNotBuildListsNoTableBehind() {
+    IndexFreshness observer = new IndexFreshness(metrics, WARN_MS, false);
+    observer.observed(KEY, 5);
+    assertEquals(java.util.Map.of(), metrics.indexBehindByTable.get());
+    assertEquals("ns.tbl", IndexFreshness.tableLabel(KEY));
+    assertEquals("odd", IndexFreshness.tableLabel("odd"), "a key of the wrong shape stays as it is");
+  }
 }

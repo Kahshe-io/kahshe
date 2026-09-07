@@ -26,6 +26,14 @@ spec:
       path: /metrics
       interval: {{ .Values.metrics.serviceMonitor.interval }}
       scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      {{- if .Values.admin.tokenSecret }}
+      # The admin port asks for the bearer; the prometheus.io annotations could not carry one.
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .Values.admin.tokenSecret }}
+          key: {{ .Values.admin.tokenKey }}
+      {{- end }}
       # Follows the admin port: scraping https when the port serves plaintext, or the reverse,
       # fails every scrape with a message about the wrong protocol.
       scheme: {{ ternary "https" "http" (and .Values.tls.enabled .Values.tls.admin) }}

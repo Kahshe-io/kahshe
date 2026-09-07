@@ -1,0 +1,18 @@
+<configuration>
+  <!-- KAHSHE_LOG_FORMAT names the fragment that defines the stderr appender: text, a line a
+       person reads, or json, one object per line from JsonLogEncoder. A fragment per form rather
+       than two appenders here, because logback warns about an appender nothing references, and
+       one warning makes it print its whole status log at every start. Any other value is an
+       error printed at startup, after which nothing is logged: the chart refuses such a value.
+
+       Both forms write to stderr, as slf4j-simple did: the CLI subcommands answer on stdout, and
+       a log line landing among them breaks whoever parses that. -->
+  <include resource="logback-${KAHSHE_LOG_FORMAT:-text}.xml"/>
+
+  <!-- Iceberg's per-scan metrics reporter logs a full ScanReport per plan; keep it out of prod logs -->
+  <logger name="org.apache.iceberg.metrics.LoggingMetricsReporter" level="WARN"/>
+
+  <root level="INFO">
+    <appender-ref ref="stderr"/>
+  </root>
+</configuration>

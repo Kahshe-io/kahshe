@@ -33,10 +33,11 @@ except `app`, which wires it to an HTTP server.
 | `GET /v1/{prefix}/namespaces/{ns}/tables/{t}` | `Forwarder` + `Mutations` | Forwarded; `scan-planning-mode=server` injected when the table qualifies. |
 | everything else | `Forwarder` | Forwarded verbatim, response relayed with its headers. |
 
-`AdminHandler` serves `/healthz`, `/readyz` and `/metrics` on a **separate port with its own
-executor**, so probes and scrapes keep answering while the data-plane thread pool is saturated by a
-slow backend. No admin request ever calls the backend inline: a scheduled prober publishes a
-reachability verdict and `/readyz` reads it.
+`AdminHandler` serves `/healthz`, `/readyz`, `/metrics` and `/index` on a **separate port with its
+own executor**, so probes and scrapes keep answering while the data-plane thread pool is saturated
+by a slow backend. No admin request ever calls the backend inline: a scheduled prober publishes a
+reachability verdict and `/readyz` reads it. `AdminAuth` gates everything but the two probes behind
+`KAHSHE_ADMIN_TOKEN` when one is set.
 
 ## How a request moves
 

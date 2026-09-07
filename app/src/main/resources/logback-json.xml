@@ -1,0 +1,6 @@
+<included>
+  <appender name="stderr" class="ch.qos.logback.core.ConsoleAppender">
+    <target>System.err</target>
+    <encoder class="io.kahshe.JsonLogEncoder"/>
+  </appender>
+</included>

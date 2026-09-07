@@ -60,6 +60,7 @@ spec:
               value: "watch"
             - name: KAHSHE_ADMIN_PORT
               value: {{ .Values.service.adminPort | quote }}
+            {{- include "kahshe.processEnv" . | nindent 12 }}
             - name: KAHSHE_INDEXER
               value: "true"
             - name: KAHSHE_INDEX_FLEET

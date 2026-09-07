@@ -49,6 +49,7 @@ spec:
               value: {{ .Values.service.dataPort | quote }}
             - name: KAHSHE_ADMIN_PORT
               value: {{ .Values.service.adminPort | quote }}
+            {{- include "kahshe.processEnv" . | nindent 12 }}
             {{- include "kahshe.backendEnv" . | nindent 12 }}
 {{- if .Values.tls.enabled }}
             {{- include "kahshe.tlsEnv" . | nindent 12 }}

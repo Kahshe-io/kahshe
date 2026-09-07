@@ -49,6 +49,9 @@ Config.fromEnv()
 Two entry paths share that configuration:
 
 - **Server** (no arguments). Starts the roles above and blocks in the JVM's non-daemon threads.
+- **CLI status**: `kahshe status <prefix> <namespace.table>`. Prints the per-table index status
+  document — the one `GET /index` on the admin port serves — from storage and the catalog, and
+  exits.
 - **CLI build**: `kahshe index <prefix> <namespace.table> <column>`. Runs one `IndexBuilder.run`
   and exits. It wires a `WatchEngine` too when `KAHSHE_WATCH_RULES` is set, because alerts follow
   builds wherever they happen, and it waits on `AlertSink.awaitDrain` before returning — an async
@@ -192,7 +195,8 @@ back, so every load would refuse the index and the term tier would prune nothing
 Every variable, with its default and its full meaning, is in
 [docs/CONFIGURATION.md](../docs/CONFIGURATION.md). `Config.fromEnv` reads about fifty of them and
 `ServerTls.fromEnv` the nine TLS ones. The ones this module *owns* are the process-shaped ones —
-`KAHSHE_PORT`, `KAHSHE_ADMIN_PORT`, `KAHSHE_MODE`, `KAHSHE_INDEXER`, and the TLS block — and the
+`KAHSHE_PORT`, `KAHSHE_ADMIN_PORT`, `KAHSHE_ADMIN_BIND`, `KAHSHE_ADMIN_TOKEN`, `KAHSHE_LOG_FORMAT`,
+`KAHSHE_MODE`, `KAHSHE_INDEXER`, and the TLS block — and the
 rest are read here only so that one place knows the environment, then handed to the module that
 owns the setting.
 

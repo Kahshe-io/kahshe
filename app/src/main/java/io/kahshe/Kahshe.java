@@ -10,7 +10,9 @@ import io.kahshe.indexer.BuildConfig;
 import io.kahshe.indexer.TableSource;
 import io.kahshe.indexer.build.IndexBuildListener;
 import io.kahshe.indexer.build.IndexBuilder;
+import io.kahshe.indexer.maintain.IndexStatus;
 import io.kahshe.indexer.maintain.IndexerService;
+import io.kahshe.proxy.http.AdminAuth;
 import io.kahshe.proxy.http.AdminHandler;
 import io.kahshe.proxy.catalog.BackendCatalogs;
 import io.kahshe.proxy.http.Forwarder;
@@ -37,6 +39,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.iceberg.Table;
+import org.apache.iceberg.catalog.TableIdentifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,6 +75,27 @@ public final class Kahshe {
           args[1], args[2], args[3], wiring.listener());
       // an async sink drains on a daemon thread; flush before exit so queued alerts are not lost
       wiring.sink().awaitDrain(15_000);
+      return;
+    }
+    if (args.length > 0 && "status".equals(args[0])) {
+      if (args.length != 3) {
+        System.err.println("usage: kahshe status <prefix> <namespace.table>");
+        System.exit(2);
+      }
+      // The same document GET /index serves, from storage: this process observed nothing and
+      // built nothing, so the catalog and the build reports are all it has, and the output says
+      // so field by field.
+      BackendCatalogs cliCatalogs = new BackendCatalogs(config.proxy());
+      TableIdentifier ident = TableIdentifier.parse(args[2]);
+      Table table = cliCatalogs.load(args[1], ident);
+      IndexStatus status = IndexStatus.fromStorage(
+          table, args[1], ident.namespace().toString(), ident.name(), config.build(),
+          System.currentTimeMillis());
+      System.out.println(
+          status.toJson(IndexStatus.storageSources(
+                  config.proxy().backendBase(),
+                  IndexPaths.root(table, config.format().indexRoot())))
+              .toPrettyString());
       return;
     }
     AtomicBoolean shuttingDown = new AtomicBoolean(false);
@@ -157,7 +182,7 @@ public final class Kahshe {
 
     HttpServer server = null;
     if (!"watch".equals(mode)) {
-      server = create(config.port(), tls);
+      server = create(new InetSocketAddress(config.port()), tls);
       server.createContext("/", new KahsheHandler(config.proxy(), config.format(), metrics, catalogs, indexer));
       // bounded pool: saturation queues briefly, then connections are refused — never unbounded
       server.setExecutor(
@@ -171,11 +196,23 @@ public final class Kahshe {
       server.start();
     }
 
+    AdminAuth adminAuth = AdminAuth.fromToken(config.adminToken(), metrics);
+    if (!adminAuth.enabled()) {
+      LOG.warn("KAHSHE_ADMIN_TOKEN is unset: the admin port {}:{} serves /metrics to anyone who "
+              + "can reach it. Set it, or narrow the bind with KAHSHE_ADMIN_BIND.",
+          config.adminBind(), config.adminPort());
+    }
     AdminHandler adminHandler =
-        new AdminHandler(metrics, new Forwarder(config.proxy().backendBase(), 3_000, config.proxy().backendCa()), shuttingDown);
+        new AdminHandler(
+            metrics,
+            new Forwarder(config.proxy().backendBase(), 3_000, config.proxy().backendCa()),
+            shuttingDown,
+            adminAuth,
+            indexer);
+    InetSocketAddress adminAddress = new InetSocketAddress(config.adminBind(), config.adminPort());
     // The admin port stays plaintext unless asked otherwise: it is usually scraped by a
     // collector inside the same pod, and forcing TLS there breaks that for no gain.
-    HttpServer admin = create(config.adminPort(), tlsSettings.admin() ? tls : null);
+    HttpServer admin = create(adminAddress, tlsSettings.admin() ? tls : null);
     admin.createContext("/", adminHandler);
     // One thread is enough because no admin handler blocks on anything: the readiness probe runs
     // on AdminHandler's own thread.
@@ -210,7 +247,8 @@ public final class Kahshe {
 
     if (dataPlane == null) {
       LOG.info(
-          "kahshe watch mode: admin on :{} -> backend {} (no data plane; {})",
+          "kahshe watch mode: admin on {}:{} -> backend {} (no data plane; {})",
+          config.adminBind(),
           config.adminPort(),
           config.proxy().backendBase(),
           indexerOn
@@ -218,8 +256,9 @@ public final class Kahshe {
               : "scanning, and delivering the build reports of builds elsewhere; indexer off");
     } else {
       LOG.info(
-          "kahshe listening on :{} (admin :{}) -> backend {} (inject planning: {}, mode: {})",
+          "kahshe listening on :{} (admin {}:{}) -> backend {} (inject planning: {}, mode: {})",
           config.port(),
+          config.adminBind(),
           config.adminPort(),
           config.proxy().backendBase(),
           config.proxy().injectPlanning(),
@@ -247,12 +286,12 @@ public final class Kahshe {
         sink);
   }
 
-  /** An HTTP or HTTPS server on {@code port}, depending on whether TLS was configured. */
-  private static HttpServer create(int port, ServerTls tls) throws IOException {
+  /** An HTTP or HTTPS server on {@code address}, depending on whether TLS was configured. */
+  private static HttpServer create(InetSocketAddress address, ServerTls tls) throws IOException {
     if (tls == null) {
-      return HttpServer.create(new InetSocketAddress(port), 0);
+      return HttpServer.create(address, 0);
     }
-    HttpsServer server = HttpsServer.create(new InetSocketAddress(port), 0);
+    HttpsServer server = HttpsServer.create(address, 0);
     server.setHttpsConfigurator(tls.configurator());
     return server;
   }
@@ -265,6 +304,9 @@ public final class Kahshe {
    * nothing else: {@link ProxyConfig} for serving, {@link FormatConfig} for reading and writing the
    * index (carried inside {@link BuildConfig} for a build) and {@link WatchConfig} for alerting.
    *
+   * @param adminBind the address the admin port binds; every interface by default, which is what
+   *     it always did. The data plane has no such setting because it is the service.
+   * @param adminToken bearer the admin port requires on everything but its probes; empty is open
    * @param catalogImpl a non-REST Iceberg catalog for a process with no data plane: any
    *     {@code Catalog} on the classpath, loaded the way Iceberg loads one. Empty means the REST
    *     client, which is the default and the only thing the proxy can use. See
@@ -273,6 +315,8 @@ public final class Kahshe {
   public record Config(
       int port,
       int adminPort,
+      String adminBind,
+      String adminToken,
       int workerThreads,
       String mode,
       boolean indexerEnabled,
@@ -288,6 +332,10 @@ public final class Kahshe {
     }
 
     public static Config fromEnv() {
+      // Logback read this before main ran and, for a name it does not know, attached no
+      // appender: the process would run and log nothing. Refused here instead, like every other
+      // bad value.
+      checkLogFormat(env("KAHSHE_LOG_FORMAT", "text"));
       String backend = env("KAHSHE_BACKEND", "http://localhost:8181/api/catalog");
       // strip trailing slash so path concatenation is uniform
       if (backend.endsWith("/")) {
@@ -379,6 +427,10 @@ public final class Kahshe {
       return new Config(
           intEnv("KAHSHE_PORT", 8282),
           intEnv("KAHSHE_ADMIN_PORT", 8283),
+          // 127.0.0.1 or the pod's own address in production, so /metrics is reachable by the
+          // collector and nothing else; the wildcard default changes nothing for a quickstart.
+          adminBind(env("KAHSHE_ADMIN_BIND", "0.0.0.0")),
+          env("KAHSHE_ADMIN_TOKEN", ""),
           intEnv("KAHSHE_WORKER_THREADS", 32),
           env("KAHSHE_MODE", "both"),
           Boolean.parseBoolean(env("KAHSHE_INDEXER", "true")),
@@ -402,12 +454,34 @@ public final class Kahshe {
     }
 
     /**
+     * The admin bind address, resolved now rather than at the bind: the data plane starts first,
+     * and an "Unresolved address" thrown after it is up leaves a process serving with no admin
+     * port and no variable named in the message.
+     */
+    static String adminBind(String value) {
+      if (new InetSocketAddress(value, 0).isUnresolved()) {
+        throw new IllegalArgumentException("KAHSHE_ADMIN_BIND=" + value
+            + " does not resolve; give an interface address, 127.0.0.1, or 0.0.0.0");
+      }
+      return value;
+    }
+
+    /** The fragment names logback.xml can select by {@code KAHSHE_LOG_FORMAT}; nothing else. */
+    static void checkLogFormat(String value) {
+      if (!value.equals("text") && !value.equals("json")) {
+        throw new IllegalArgumentException("KAHSHE_LOG_FORMAT must be text or json (lowercase), "
+            + "not '" + value + "': logback selects a fragment by that name and attaches no "
+            + "appender for one it lacks");
+      }
+    }
+
+    /**
      * The token cap, refused at startup rather than at the first build. {@code Analyzer.Contract}
      * says why 0 is not "unlimited"; a value past int range would wrap on the cast to 0, to a
      * negative, or to a cap nobody asked for. Both fail here, the way an unknown KAHSHE_WATCH_SINK
      * does, with the reason.
      */
-    private static int tokenLength(long value) {
+    static int tokenLength(long value) {
       if (value <= 0 || value > Integer.MAX_VALUE) {
         throw new IllegalArgumentException("KAHSHE_MAX_TOKEN_LENGTH must be between 1 and "
             + Integer.MAX_VALUE + " (a cap of 0 is not 'unlimited'; the default is "

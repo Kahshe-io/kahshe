@@ -202,7 +202,7 @@ public final class PlanRoutes {
                   name -> declaresColumn(catalog, match.ident(), name));
           PlanTableScanRequest request = PlanTableScanRequestParser.fromJson(extraction.cleanedJson());
           PlanTableScanResponse response =
-              planService.plan(catalog, match.ident(), request, extraction.hints());
+              planService.plan(catalog, match.ident(), request, extraction.hints(), callerToken);
           return json(200, PlanTableScanResponseParser.toJson(response));
         }
         case FETCH_PLAN -> {

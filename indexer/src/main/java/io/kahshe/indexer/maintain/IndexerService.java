@@ -2,12 +2,16 @@ package io.kahshe.indexer.maintain;
 
 import java.io.IOException;
 import io.kahshe.analysis.Canonical;
+import io.kahshe.common.BoundedCache;
 import io.kahshe.format.BuildLease;
+import io.kahshe.format.BuildReport;
 import io.kahshe.format.IcebergKinds;
 import io.kahshe.format.type.gram.Grams;
 import io.kahshe.format.IndexPaths;
 import io.kahshe.format.type.term.TermIndexWriter;
 import io.kahshe.common.Metrics;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,7 +46,7 @@ import io.kahshe.indexer.build.IndexSettings;
  * the claim order is rotated by this member's {@link Fleet#ordinal} so N members start on N
  * different columns.
  */
-public final class IndexerService {
+public final class IndexerService implements IndexStatus.Source {
   private static final Logger LOG = LoggerFactory.getLogger(IndexerService.class);
 
   public record Job(
@@ -55,16 +59,34 @@ public final class IndexerService {
   private final Map<String, Long> handled = new ConcurrentHashMap<>();
   /**
    * Columns refused as unindexable: {@code table key|column} to the schema id the refusal was
-   * decided under. Without it a bad column costs a build attempt, a lease and a WARN on every
-   * commit, forever, to reach the same answer — the dedup above is per TABLE and a new snapshot
-   * clears it for every column at once.
+   * decided under, and why. Without it a bad column costs a build attempt, a lease and a WARN on
+   * every commit, forever, to reach the same answer — the dedup above is per TABLE and a new
+   * snapshot clears it for every column at once.
    *
    * <p>Keyed by schema id rather than cleared on commit because a schema change is the only thing
    * that can make a refusal wrong: an ALTER that turns the column into a string is picked up on
    * the next observation, with no restart. It gains an entry only where an operator's property
    * names a column kahshe cannot index, which is why it is not bounded like {@link IndexFreshness}.
    */
-  private final Map<String, Integer> refused = new ConcurrentHashMap<>();
+  private final Map<String, Refused> refused = new ConcurrentHashMap<>();
+
+  private record Refused(int schemaId, String reason) {}
+
+  /**
+   * What {@code GET /index} reports for a table beyond its freshness: the columns as last
+   * declared, the last build of each, and the last failure. Capped as {@link IndexFreshness} is,
+   * so a large catalog cannot grow it without limit. A build is kept distilled
+   * ({@link IndexStatus.Column}), not as its whole report: the report lists every file the build
+   * added and departed, which for a large table is most of it, for numbers nobody asked for.
+   */
+  private static final class TableState {
+    volatile List<String> declared = List.of();
+    final Map<String, IndexStatus.Column> columns = new ConcurrentHashMap<>();
+    volatile IndexStatus.Failure lastFailure;
+  }
+
+  private final BoundedCache<String, TableState> states =
+      new BoundedCache<>(IndexFreshness.MAX_TRACKED);
   private final BuildConfig config;
   private final IndexBuildListener listener;
   /**
@@ -122,6 +144,7 @@ public final class IndexerService {
       // queued here would only fill it and then report drops.
       return;
     }
+    states.computeIfAbsent(key, k -> new TableState()).declared = List.copyOf(columns);
     Long last = handled.get(key);
     if (last != null && last == snapshotId) {
       return;
@@ -140,6 +163,107 @@ public final class IndexerService {
               + "kahshe_index_max_behind_seconds.",
           queue.size(), namespaceRaw, tableRaw, snapshotId);
     }
+  }
+
+  @Override
+  public List<IndexStatus> tables() {
+    if (!enabled) {
+      return List.of();
+    }
+    List<IndexStatus> out = new ArrayList<>();
+    for (IndexFreshness.Entry entry : freshness.entries()) {
+      out.add(statusOf(entry));
+    }
+    return out;
+  }
+
+  /**
+   * A process that does not build lists nothing, and says so: its freshness is tracked (the
+   * gauges stay honest) but it reads nothing behind, so a listing from it would show every table
+   * current when the replica that builds may be hours behind.
+   */
+  @Override
+  public String note() {
+    return enabled
+        ? null
+        : "KAHSHE_INDEXER=false: this process observes tables but builds nothing, so it has no "
+            + "per-table status to give; ask a replica that builds";
+  }
+
+  private IndexStatus statusOf(IndexFreshness.Entry entry) {
+    // The key's three raw segments hold no literal '|': a client sends one percent-encoded, or
+    // java.net.URI refuses the request line before it reaches the handler.
+    String[] parts = entry.key().split("\\|", 3);
+    String prefix = parts[0];
+    String namespace = parts.length > 1 ? parts[1] : "";
+    String table = parts.length > 2 ? parts[2] : "";
+    try {
+      TableIdentifier ident = decodeIdent(namespace, table);
+      prefix = java.net.URLDecoder.decode(prefix, java.nio.charset.StandardCharsets.UTF_8);
+      namespace = ident.namespace().toString();
+      table = ident.name();
+    } catch (IllegalArgumentException e) {
+      // a malformed raw segment: listed as tracked under it; the worker's failure says the rest
+    }
+    TableState state = states.get(entry.key());
+    List<String> declared = state == null ? List.of() : state.declared;
+    Map<String, IndexStatus.Column> columns = new LinkedHashMap<>();
+    List<IndexStatus.Refusal> refusals = new ArrayList<>();
+    if (state != null) {
+      for (String column : declared) {
+        IndexStatus.Column built = state.columns.get(column.trim());
+        if (built != null) {
+          columns.put(column, built);
+        }
+        Refused refusal = refused.get(entry.key() + "|" + column);
+        if (refusal != null) {
+          refusals.add(new IndexStatus.Refusal(column, refusal.reason()));
+        }
+      }
+      // built under an earlier declaration: the index is still there, so the build still shows
+      state.columns.forEach(columns::putIfAbsent);
+    }
+    return new IndexStatus(
+        prefix,
+        namespace,
+        table,
+        declared,
+        entry.observedSnapshot(),
+        entry.hasBuild() ? entry.builtSnapshot() : null,
+        freshness.behindSeconds(entry),
+        columns,
+        state == null ? null : state.lastFailure,
+        refusals);
+  }
+
+  /**
+   * The column's last build, read back from the report the build just wrote — or one written
+   * elsewhere, when this process only verified the column current. {@code buildColumn} returns
+   * totals, not the report, and one small read per publish is cheaper than a second return path
+   * through the builder.
+   */
+  private void remember(Table table, TableState state, String column) {
+    var field = IndexSettings.resolveField(table, column);
+    if (field == null) {
+      return;
+    }
+    try {
+      BuildReport report =
+          BuildReport.read(
+              IndexPaths.io(table, config.format()),
+              IndexPaths.root(table, config.format().indexRoot()),
+              field.fieldId());
+      if (report != null) {
+        state.columns.put(column.trim(), IndexStatus.Column.of(report));
+      }
+    } catch (RuntimeException e) {
+      LOG.warn("build report for {} unreadable; /index keeps the column's previous build", column,
+          e);
+    }
+  }
+
+  private static String describe(Throwable e) {
+    return e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
   }
 
   /** This member's claim order, for a poller that shares the rotation (0 outside a fleet). */
@@ -162,6 +286,7 @@ public final class IndexerService {
         return;
       }
       String key = job.prefixRaw() + "|" + job.namespaceRaw() + "|" + job.tableRaw();
+      TableState state = states.computeIfAbsent(key, k -> new TableState());
       try {
         TableIdentifier ident = decodeIdent(job.namespaceRaw(), job.tableRaw());
         String prefix =
@@ -186,6 +311,12 @@ public final class IndexerService {
             continue;
           }
           if (indexCurrent(table, column, current)) {
+            // Current from a build this process never did -- before it started, or on another
+            // fleet member: the report beside the index is that build's only account here.
+            IndexStatus.Column known = state.columns.get(column.trim());
+            if (known == null || known.snapshot() != current) {
+              remember(table, state, column);
+            }
             continue;
           }
           long start = System.nanoTime();
@@ -212,11 +343,15 @@ public final class IndexerService {
             } else {
               failed = true;
               metrics.indexBuildFailures.increment();
+              state.lastFailure = new IndexStatus.Failure(
+                  column.trim() + ": " + describe(e), System.currentTimeMillis());
               LOG.warn("index build failed for {}.{} (will retry on next observation)", ident,
                   column, e);
             }
             continue;
           }
+          // recorded before the count moves, so a reader that saw the count sees the build
+          remember(table, state, column);
           metrics.indexBuilds.increment();
           LOG.info("indexed {}.{} @ snapshot {} in {}ms (root {})", ident, column, current,
               (System.nanoTime() - start) / 1_000_000, IndexPaths.root(table, config.format().indexRoot()));
@@ -240,14 +375,16 @@ public final class IndexerService {
         metrics.indexBuildFailures.increment();
         handled.remove(key); // retry on next observation
         freshness.failed(key);
+        state.lastFailure = new IndexStatus.Failure(describe(e), System.currentTimeMillis());
         LOG.warn("index build failed for {} (will retry on next observation)", key, e);
       }
     }
   }
 
   /**
-   * Whether the table's schema says this column can never be indexed — what separates a
-   * configuration error from a build that failed and may yet pass.
+   * Why the table's schema says this column can never be indexed, or null when it can — what
+   * separates a configuration error from a build that failed and may yet pass. Worded for an
+   * operator, because {@code kahshe status} shows it with no build to take a reason from.
    *
    * <p>Asked of the SCHEMA rather than read off the exception type, because a build raises
    * {@code IllegalArgumentException} from its middle too — a prior bloom leaf that will not parse
@@ -257,23 +394,34 @@ public final class IndexerService {
    * <p>The negation of the admission test in {@code IndexBuilder.resolveTarget}, down to
    * {@code shapeOf} (a list or map is admitted on the kind of what it holds) and the struct-path
    * rule, and it has to move when that one does. The error is one-sided on purpose: a column this
-   * answers false for is merely retried.
+   * answers null for is merely retried.
    */
-  private static boolean unindexable(Table table, String column) {
+  static String refusalReason(Table table, String column) {
     var field = IndexSettings.resolveField(table, column);
-    return field == null
-        || !Canonical.indexable(IcebergKinds.shapeOf(field.type()).kind())
-        || IcebergKinds.repeatedPath(table.schema(), field.fieldId());
+    if (field == null) {
+      return "no schema of the table has a column named " + column.trim();
+    }
+    if (!Canonical.indexable(IcebergKinds.shapeOf(field.type()).kind())) {
+      return "type " + field.type() + " has no canonical form to index";
+    }
+    if (IcebergKinds.repeatedPath(table.schema(), field.fieldId())) {
+      return "the path to " + column.trim() + " passes through a list or map";
+    }
+    return null;
+  }
+
+  private static boolean unindexable(Table table, String column) {
+    return refusalReason(table, column) != null;
   }
 
   private boolean refusedUnderThisSchema(Table table, String key, String column) {
-    Integer at = refused.get(key + "|" + column);
-    return at != null && at == table.schema().schemaId();
+    Refused at = refused.get(key + "|" + column);
+    return at != null && at.schemaId() == table.schema().schemaId();
   }
 
   private void refuse(
       Table table, String key, String column, TableIdentifier ident, Exception cause) {
-    refused.put(key + "|" + column, table.schema().schemaId());
+    refused.put(key + "|" + column, new Refused(table.schema().schemaId(), cause.getMessage()));
     columnsRefused.increment();
     LOG.warn(
         "{}.{} cannot be indexed: {}. That is a kahshe.index property to fix rather than a build "

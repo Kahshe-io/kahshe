@@ -143,7 +143,7 @@ term is absent, so prune." Every tier reader applies the same rule to a leaf it 
     │
     └─▶ CountRoutes ─ /_count from the aggregate term tier, or a refusal
 
-  AdminHandler, port 8283 ── /healthz /readyz /metrics
+  AdminHandler, port 8283 ── /healthz /readyz /metrics /index   (bearer: KAHSHE_ADMIN_TOKEN)
 ```
 
 ### Step by step
@@ -212,8 +212,10 @@ multi-token value, or any data file having left the table since the index was bu
 refusal rather than a number that is nearly right. Pruning is unaffected by that last case,
 because pruning only asks *which* files hold a term, never how many times.
 
-**Admin.** `AdminHandler` serves `/healthz`, `/readyz` and `/metrics` on a separate port with its
-own executor, so probes answer while the data plane is saturated. `/readyz` reports the last
+**Admin.** `AdminHandler` serves `/healthz`, `/readyz`, `/metrics` and `/index` (per-table index
+status) on a separate port with its own executor, so probes answer while the data plane is
+saturated. `AdminAuth` checks `KAHSHE_ADMIN_TOKEN` before the path switch, so with a token set
+everything but the two probes answers 401 to a caller without it, unknown paths included. `/readyz` reports the last
 verdict of a backend probe that re-observes the backing catalog every 5 s, so an unreachable
 catalog turns it false within seconds. That probe runs off the request thread and must stay off
 it: the handler runs on a single-threaded executor, and a probe on the request thread turns a slow

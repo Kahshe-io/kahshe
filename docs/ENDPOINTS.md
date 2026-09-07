@@ -191,9 +191,12 @@ Its own errors carry one `type`, `CountError`, rather than Iceberg exception nam
 
 ## 4. Admin port (`KAHSHE_ADMIN_PORT`, default 8283)
 
-`GET /healthz`, `GET /readyz`, `GET /metrics` (Prometheus text), on their own executor so probes
-keep answering while the data plane is saturated. The metric reference is in
-[OPERATIONS.md](OPERATIONS.md).
+`GET /healthz`, `GET /readyz`, `GET /metrics` (Prometheus text), `GET /index` and
+`GET /index/{prefix}/{namespace}/{table}` (per-table index status, JSON), on their own executor so
+probes keep answering while the data plane is saturated. With `KAHSHE_ADMIN_TOKEN` set, everything
+but the two probes needs `Authorization: Bearer <token>`: a missing or wrong one is 401 with a
+`WWW-Authenticate` challenge, before an unknown path is a 404. The metric reference and the status
+document are in [OPERATIONS.md](OPERATIONS.md).
 
 ---
 

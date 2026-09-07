@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +41,34 @@ class MetricsCompletenessTest {
             field.getName() + " is a public counter that scrape() never emits (looked for the value "
                 + expected + ")");
         expected += 7;
+      }
+    }
+  }
+
+  /**
+   * The labelled half: a map's series appear only once it holds a key, so each map is given one
+   * key nothing else uses and the scrape must show it. The key's shape is a probe, not a label
+   * set — this test knows no more about a map's labels than the one above knows a counter's name.
+   */
+  @Test
+  void everyPublicLabelledMapIsEmittedByScrapeOnceItHoldsAKey() throws Exception {
+    Metrics metrics = new Metrics();
+    int maps = 0;
+    for (Field field : Metrics.class.getFields()) {
+      if (field.getType() == ConcurrentHashMap.class && !Modifier.isStatic(field.getModifiers())) {
+        @SuppressWarnings("unchecked")
+        ConcurrentHashMap<String, LongAdder> map = (ConcurrentHashMap<String, LongAdder>) field.get(metrics);
+        map.computeIfAbsent("probe_" + field.getName(), k -> new LongAdder()).add(1);
+        maps++;
+      }
+    }
+    assertTrue(maps >= 2, "found only " + maps + " labelled maps: the reflection is looking in the wrong place");
+
+    String scrape = metrics.scrape();
+    for (Field field : Metrics.class.getFields()) {
+      if (field.getType() == ConcurrentHashMap.class && !Modifier.isStatic(field.getModifiers())) {
+        assertTrue(scrape.contains("probe_" + field.getName()),
+            field.getName() + " is a public labelled map that scrape() never emits");
       }
     }
   }

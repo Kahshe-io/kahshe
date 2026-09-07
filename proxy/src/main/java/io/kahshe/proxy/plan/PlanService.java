@@ -6,8 +6,12 @@ import io.kahshe.common.BoundedCache;
 import io.kahshe.common.WeighedCache;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -91,10 +95,22 @@ public final class PlanService {
     metrics.planCacheWeightBytes = planCache::estimatedWeightBytes;
   }
 
+  /** As below, from a caller with no bearer: the audit line says {@code caller=none}. */
+  public PlanTableScanResponse plan(
+      Catalog catalog,
+      TableIdentifier ident,
+      PlanTableScanRequest request,
+      List<IndexPruner.ContainsHint> hints) {
+    return plan(catalog, ident, request, hints, null);
+  }
+
   /**
    * Plans one scan, always {@code COMPLETED} with every task in the response. A table with no
    * current snapshot, asked for without pinning one, gets an empty plan: an unwritten table has
    * nothing to scan, and that is not a failure.
+   *
+   * <p>Every plan served leaves one INFO line and moves the table's counters; {@code callerToken}
+   * is the request's Authorization header, which appears in that line only as a hash.
    *
    * @throws DeleteBearingSnapshotException for a snapshot not provably delete-free, unless
    *     {@code KAHSHE_SERVE_DELETE_BEARING} is set
@@ -103,12 +119,14 @@ public final class PlanService {
       Catalog catalog,
       TableIdentifier ident,
       PlanTableScanRequest request,
-      List<IndexPruner.ContainsHint> hints) {
+      List<IndexPruner.ContainsHint> hints,
+      String callerToken) {
+    long start = System.nanoTime();
     Table table = catalog.loadTable(ident);
 
     if (table.currentSnapshot() == null && request.snapshotId() == null) {
       // freshly created table: an empty plan, not an NPE
-      return completed(List.of(), table);
+      return served(table, ident, "none", callerToken, 0, List.of(), start);
     }
 
     long currentSnapshotId =
@@ -197,7 +215,50 @@ public final class PlanService {
       response.add(new NoResidualTask(stripped != null ? stripped : task));
     }
 
+    return served(
+        table, ident, Long.toString(targetSnapshotId), callerToken, plan.statsTasks().size(),
+        response, start);
+  }
+
+  /**
+   * The audit line and the per-table counters, then the response. One line per plan in a fixed
+   * key order, so it greps and parses; what it never carries is the token or a path.
+   */
+  private PlanTableScanResponse served(
+      Table table,
+      TableIdentifier ident,
+      String snapshot,
+      String callerToken,
+      int filesIn,
+      List<FileScanTask> response,
+      long startNanos) {
+    metrics.planServed(ident.toString(), response.size());
+    LOG.info(
+        "plan table={} snapshot={} caller={} files_in={} files_kept={} ms={}",
+        ident, snapshot, callerId(callerToken), filesIn, response.size(),
+        (System.nanoTime() - startNanos) / 1_000_000);
     return completed(response, table);
+  }
+
+  /**
+   * Who asked, as the first eight hex digits of the SHA-256 of the bearer: enough to tie one
+   * caller's plans together in a log, never enough to replay one. {@code none} without a bearer.
+   */
+  private static String callerId(String authorization) {
+    if (authorization == null || authorization.isBlank()) {
+      return "none";
+    }
+    String token = authorization.strip();
+    if (token.regionMatches(true, 0, "Bearer ", 0, 7)) {
+      token = token.substring(7).strip();
+    }
+    try {
+      byte[] digest =
+          MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));
+      return HexFormat.of().formatHex(digest, 0, 4);
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 is mandatory in every JVM", e);
+    }
   }
 
   /**

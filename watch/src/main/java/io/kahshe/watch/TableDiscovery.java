@@ -137,7 +137,7 @@ public final class TableDiscovery {
   public static String[] encodeForObserve(String prefix, TableIdentifier ident) {
     return new String[] {
       URLEncoder.encode(prefix, StandardCharsets.UTF_8),
-      RESTUtil.encodeNamespace(ident.namespace()),
+      RESTUtil.encodeNamespace(ident.namespace(), IndexerService.NAMESPACE_SEPARATOR),
       URLEncoder.encode(ident.name(), StandardCharsets.UTF_8)
     };
   }

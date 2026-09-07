@@ -22,8 +22,13 @@ dependencies {
     implementation("org.apache.iceberg:iceberg-core:1.11.0")
     implementation("org.apache.iceberg:iceberg-aws:1.11.0")
     runtimeOnly("org.apache.iceberg:iceberg-aws-bundle:1.11.0")
-    implementation("org.slf4j:slf4j-simple:2.0.13")
+    // The one slf4j binding in the distribution; every other module logs through the API only.
+    // logback rather than slf4j-simple because the JSON form (KAHSHE_LOG_FORMAT=json) needs an
+    // encoder seam, which simple does not have. EPL 1.0 / LGPL 2.1.
+    implementation("ch.qos.logback:logback-classic:1.5.38")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    // the logging tests parse the encoder's output with the JSON reader the modules already use
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:2.21.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

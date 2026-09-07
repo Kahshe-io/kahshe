@@ -437,7 +437,7 @@ public final class IndexBuilder {
     // its number. A compacting build therefore does the full merge even with nothing new to read.
     if (incremental && newPaths.isEmpty() && ordinalRemap == null) {
       return restampOnly(target, listener, lease, prior.termMeta(), priorBloomMeta, coverage,
-          reconciled.departedPaths(), currentPaths);
+          reconciled.departedPaths(), currentPaths, metrics);
     }
 
     com.fasterxml.jackson.databind.JsonNode termSnapshot =
@@ -493,7 +493,7 @@ public final class IndexBuilder {
       }
       return publish(target, config, listener, lease, watch, prior, priorBloomMeta, incremental,
           coverage, newPaths, reconciled.departedPaths(), probed.leaves(), ordinalRemap, gramState,
-          blooms, read, runs, store, startOrdinal, partial, files.remaining());
+          blooms, read, runs, store, startOrdinal, partial, files.remaining(), metrics);
     }
   }
 
@@ -770,7 +770,8 @@ public final class IndexBuilder {
   private static long[] restampOnly(
       BuildTarget target, IndexBuildListener listener, BuildLease lease,
       com.fasterxml.jackson.databind.JsonNode termMeta, IndexMeta priorBloomMeta,
-      List<Coverage.Entry> coverage, List<String> departedPaths, List<String> currentPaths)
+      List<Coverage.Entry> coverage, List<String> departedPaths, List<String> currentPaths,
+      io.kahshe.common.Metrics metrics)
       throws IOException {
     // SAY SO: a build with nothing to do and a build that indexed everything otherwise report
     // themselves identically, and an index scope widened to a threshold that happens to add no
@@ -804,7 +805,7 @@ public final class IndexBuilder {
         target.namespace(), target.tableName(), target.column(), target.snapshotId(),
         BuildReport.Kind.RESTAMP, target.contract(), target.gramRule(),
         target.startedMs(), List.of(), departedPaths, priorBloomMeta.indexBytes, 0,
-        false, List.of());
+        false, List.of(), metrics);
     return new long[] {target.snapshotId(), priorBloomMeta.indexBytes, liveCount, 0};
   }
 
@@ -1189,7 +1190,8 @@ public final class IndexBuilder {
       List<String> departedPaths, List<String> priorAggregates,
       java.util.Map<Integer, Integer> ordinalRemap, GramState gramState,
       Map<String, NgramBloom> blooms, ReadPassResult read, List<java.nio.file.Path> runs,
-      TermRunStore store, int startOrdinal, boolean partial, int remaining)
+      TermRunStore store, int startOrdinal, boolean partial, int remaining,
+      io.kahshe.common.Metrics metrics)
       throws IOException {
     String priorBloomUuid = priorBloomMeta == null ? null : priorBloomMeta.uuid;
     // THE LAST CHECK BEFORE THE FIRST PUBLISH. Two builders that both believed they took the
@@ -1243,7 +1245,7 @@ public final class IndexBuilder {
         target.namespace(), target.tableName(), target.column(), target.snapshotId(),
         incremental ? BuildReport.Kind.INCREMENTAL : BuildReport.Kind.FULL, target.contract(),
         target.gramRule(), target.startedMs(), newPaths, departedPaths, bloomBytes,
-        read.saturated(), partial, watch.alerts());
+        read.saturated(), partial, watch.alerts(), metrics);
     return new long[] {
         target.snapshotId(), bloomBytes, blooms.size(), read.dataBytes(), remaining};
   }
@@ -1567,7 +1569,8 @@ public final class IndexBuilder {
       org.apache.iceberg.io.FileIO io, String indexRoot, int fieldId, String prefix, String namespace,
       String tableName, String column, long snapshotId, BuildReport.Kind kind, Analyzer.Contract contract,
       Grams.Contract gramRule, long startedMs, List<String> added, List<String> departed, long bloomBytes,
-      int saturatedFiles, boolean partial, List<Map<String, Object>> alerts) {
+      int saturatedFiles, boolean partial, List<Map<String, Object>> alerts,
+      io.kahshe.common.Metrics metrics) {
     String previous = null;
     try {
       BuildReport prior = BuildReport.read(io, indexRoot, fieldId);
@@ -1610,11 +1613,17 @@ public final class IndexBuilder {
     if (partial) {
       warnings.add("partial: a checkpoint pass, not the whole snapshot");
     }
+    long publishedMs = System.currentTimeMillis();
     new BuildReport(
             Long.toHexString(java.util.concurrent.ThreadLocalRandom.current().nextLong()),
             previous, prefix, namespace, tableName, column, fieldId, snapshotId, kind, contract.id(),
-            gramRule.id(), startedMs, System.currentTimeMillis(), counters, added, departed, leaves,
+            gramRule.id(), startedMs, publishedMs, counters, added, departed, leaves,
             warnings, alerts)
         .write(io, indexRoot);
+    // After the write, so this agrees with kahshe_index_builds_total on what counts as a build: a
+    // report that could not be written fails the caller, and the caller counts a failure.
+    metrics.indexPublished(
+        namespace.isEmpty() ? tableName : namespace + "." + tableName, column,
+        kind.name().toLowerCase(java.util.Locale.ROOT), publishedMs - startedMs);
   }
 }

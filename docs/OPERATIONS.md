@@ -58,10 +58,15 @@ claim is not recorded either, so a later observation of the same snapshot retrie
 
 A selection, not the whole set: `GET /metrics` on the admin port (8283) emits every series.
 
+The log is the other signal, on stderr. `KAHSHE_LOG_FORMAT=json` (the chart's `logging.format`)
+makes it one JSON object per line — `ts`, `level`, `logger`, `thread`, `msg`, `exception` — so a
+collector indexes the per-file build lines and the per-plan lines by field instead of parsing the
+text form.
+
 ### What each index tier pruned
 
-`kahshe_prune_files_in_total{tier}` and `kahshe_prune_files_kept_total{tier}` — the only
-**labelled** series kahshe emits, one pair per index type, recorded on every turn of the pruning
+`kahshe_prune_files_in_total{tier}` and `kahshe_prune_files_kept_total{tier}` — one pair per
+index type, recorded on every turn of the pruning
 cascade. The label is the type's own key (`aggregate` for the term tier, `grams`, `bloom`, or whatever a
 deployment's own type calls itself), because the types are a `ServiceLoader` seam and a fixed field per tier
 would be wrong the day someone adds one. Nothing is emitted at all until a tier has taken a turn.
@@ -83,6 +88,23 @@ says which one is doing the work:
 These exist because the cascade was previously unobservable: `kahshe_plan_files_total` and
 `kahshe_plan_files_kept_total` are recorded once per plan, so which tier pruned, and whether a
 second predicate narrowed anything at all, could only be inferred.
+
+### Per table
+
+Every other `kahshe_index_*` and `kahshe_plan_*` series is a fleet aggregate, which cannot say
+which table is behind, whose builds are eating the indexer, or whose queries prune nothing. These
+can. The `table` label is `namespace.table` — never the prefix, which can carry tenancy — and a
+family is absent from the scrape until it has something to say. They carry their own names rather
+than riding as labelled series under the fleet ones, so `sum()` over any one family still means
+something.
+
+| metric | what it says |
+|---|---|
+| `kahshe_index_behind_seconds{table}` | how long each tracked table has been behind; a current table has no line. `kahshe_index_max_behind_seconds` is the worst of these |
+| `kahshe_table_index_builds_total{table,column,kind}` | publishes per column, `kind` one of `full`, `incremental`, `restamp`. A checkpointed build counts once per pass, since each pass publishes |
+| `kahshe_table_index_build_seconds_total{table,column}` | wall time spent building each column, to the millisecond, so `rate()` over it is that column's share of the indexer |
+| `kahshe_table_plan_requests_total{table}` | plans served per table. The fleet's `kahshe_plan_requests_total` counts requests as they arrive, before the auth gate, so it runs ahead of the sum of these |
+| `kahshe_table_plan_files_kept_total{table}` | files returned per table. Divided by the requests, the average plan size — and a table whose average never falls as it grows is one the index is not pruning |
 
 ### Caches
 
@@ -173,6 +195,31 @@ rebuilds while the existing index keeps serving under its own rules.
 location, because index files are not referenced by table metadata. This is the one maintenance
 interaction that costs something you have to rebuild rather than something that self-heals.
 
+### Checking a table
+
+`GET /index` on the admin port lists every table this process has seen declare `kahshe.index`
+since it started; `GET /index/{prefix}/{namespace}/{table}` answers for one, or 404 when it has
+not been seen (a multi-level namespace is written as on the data port, levels joined by `%1F`).
+Both sit behind `KAHSHE_ADMIN_TOKEN`. Per table: the columns as last declared, `current_snapshot`
+(last observed) against `indexed_snapshot` (last covered by a completed pass, null until one
+has), `behind_seconds` — 0 when they agree, otherwise dated from the first uncovered observation,
+the rule `kahshe_index_max_behind_seconds` uses — then per column the last build's kind (`FULL`,
+`INCREMENTAL`, `RESTAMP`), snapshot, files covered, added and departed, `built_at`, duration,
+analyzer and warnings; the last build failure, kept across later successes so a flapping build
+shows; and the columns refused as unindexable, with the reason. A replica with
+`KAHSHE_INDEXER=false` answers an empty list and a `note` saying so: it cannot build, so it is not
+the one to report. The listing is per process and not durable — a restart empties it until
+traffic refills it, and each replica lists only the tables whose `loadTable` passed through it.
+
+`kahshe status <prefix> <namespace.table>` prints the same document from outside any process:
+the current snapshot and the declared columns from the catalog, each column's last build from its
+`build-report.json` under the index root, `indexed_snapshot` as the oldest snapshot those reports
+cover (null unless every declared column has a complete build under the configured analyzer and
+gram rule), and `behind_seconds` as the age of the oldest retained commit the index does not
+cover — the command has no observation history, so the storage reading stands in for the
+observed one, and a `sources` block in the output says so field by field. `last_failure` is not
+known from storage.
+
 ---
 
 ## 4. Deployment shapes
@@ -237,6 +284,10 @@ the signal that it is too small.
   `KAHSHE_AUTH_CACHE_TTL_MS` (default 60 s, capped at the token's own expiry when it is a readable
   JWT), so revocation lags by at most that TTL; a denial is cached for 2 s so a bad-token storm
   does not amplify into the backend.
+- **Every served plan is logged**, one INFO line in a fixed key order — `plan table=ns.table
+  snapshot=N caller=<hash> files_in=N files_kept=N ms=N` — where `caller` is the first eight hex
+  digits of the SHA-256 of the bearer (`none` without one): enough to tie one caller's plans
+  together, never the token, and never a file path.
 - **Granularity is a deployment choice.** By default the gate proves the caller can load the table and
   planning then runs under kahshe's service credential, so sub-table controls (column masking, row
   filters) are not honored on served endpoints. `KAHSHE_PLANNING_IDENTITY=caller` plans and counts
@@ -250,6 +301,16 @@ the signal that it is too small.
   whose token can load the table, regardless of masking or row filters at the backend. Watch webhook
   payloads carry the same class of metadata.
 - **TLS.** kahshe serves TLS natively when `KAHSHE_TLS_CERT` and `KAHSHE_TLS_KEY` are set — the PEM pair a `kubernetes.io/tls` Secret holds — with optional mutual TLS and certificate rotation without a restart. See [CONFIGURATION.md](CONFIGURATION.md#tls). **Unconfigured, port 8282 is plaintext HTTP carrying bearer tokens**, which is fine on loopback or inside a trust boundary you control and is not fine anywhere else.
+- **The admin port.** `/metrics` is operational telemetry — volumes, cache weights, build and alert
+  counts, and per table (section 2) build, plan and freshness figures under the table's own name,
+  never a prefix, a path or a token — but it is a surface anyone who can reach port 8283 can read,
+  and it answered everyone until now. `KAHSHE_ADMIN_TOKEN` puts a bearer on it and on every other
+  admin path; a missing or wrong token is a 401 with a challenge, counted on
+  `kahshe_admin_auth_rejected_total`, and the comparison is constant-time against a digest. `/healthz`
+  and `/readyz` stay open whatever is set, because a kubelet cannot easily carry a bearer and a
+  health endpoint that needs a secret fails closed for the wrong reason. `KAHSHE_ADMIN_BIND` narrows
+  where the port listens: `127.0.0.1` or the pod IP in production, every interface by default.
+  Unset, both leave the port as it was, and startup says so at WARN.
   The image runs as uid 10001 and the chart ships a NetworkPolicy.
 
 ---

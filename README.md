@@ -94,7 +94,9 @@ ALTER TABLE logs.events SET PROPERTIES (
 
 Strings, integers, decimals, UUIDs, binary, lists and maps index. Every knob resolves per column,
 then per table, then from the deployment default, and all are cost dials with no correctness
-cliff: [docs/CONFIGURATION.md](docs/CONFIGURATION.md#1-table-properties).
+cliff: [docs/CONFIGURATION.md](docs/CONFIGURATION.md#1-table-properties). `GET /index` on the
+admin port says, per table, which snapshot is indexed and how far behind it is
+([docs/OPERATIONS.md](docs/OPERATIONS.md#checking-a-table)).
 
 <a id="measured"></a>
 ## Measured
@@ -128,5 +130,5 @@ check the caller's own token can load the table. Everything else: [docs/OPERATIO
 
 [Architecture](docs/ARCHITECTURE.md) · [Format](docs/FORMAT.md) · [Configuration](docs/CONFIGURATION.md) · [Endpoints](docs/ENDPOINTS.md) · [Operations](docs/OPERATIONS.md) · [Watch](docs/WATCH.md) · [Helm](helm/kahshe/README.md) · [Sigma](sigma/README.md) · [Benchmark](benchmark/BENCHMARK.md) · [Contributing](CONTRIBUTING.md)
 
-Pre-release: 527 tests; not yet suitable for production traffic, and not running in production anywhere. Apache-2.0 — [LICENSE](LICENSE), [NOTICE](NOTICE).
+Pre-release: 566 tests; not yet suitable for production traffic, and not running in production anywhere. Apache-2.0 — [LICENSE](LICENSE), [NOTICE](NOTICE).
 Apache, Apache Iceberg and Iceberg are trademarks of the Apache Software Foundation.

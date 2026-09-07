@@ -69,6 +69,29 @@ tls:
     keyAlgorithm: RSA
     keySize: 2048
 
+# The admin port on every pod: /healthz, /readyz and /metrics. The probes answer without a token
+# whatever is set here, so nothing below can take a pod out of service.
+admin:
+  # A Secret holding the bearer /metrics requires, under tokenKey. Empty leaves the port open,
+  # which the process says at startup at WARN, and the NetworkPolicy's monitoring selector is
+  # then all that stands between a scrape and the cluster. The scraper has to present the token:
+  # the chart's ServiceMonitor does, from this same Secret; the prometheus.io annotations cannot
+  # carry one, so metrics.annotations and a token do not combine. Set here, it reaches every
+  # role's pods — the indexer and the watcher expose the same port.
+  tokenSecret: ""
+  tokenKey: token
+  # Where the port listens. 0.0.0.0 is every interface; podIP binds the pod's own address from
+  # the downward API, which is the production value: kubelet probes and cross-pod scrapes still
+  # reach it, and loopback — where a sidecar would — no longer does. 127.0.0.1 is not offered,
+  # because the probes reach a pod by its IP and would all fail.
+  bind: "0.0.0.0"
+
+# How every pod writes its log lines, on stderr either way. text is the line a person reads in
+# kubectl logs; json is one object per line (ts, level, logger, thread, msg, exception) for a
+# collector that indexes fields rather than greps them.
+logging:
+  format: text
+
 proxy:
   # TO SCALE OUT: set tableCacheTtlMs to 0 FIRST. Every cache is per process, and so is the record
   # of which snapshot a replica last forwarded for a table. With two replicas at a non-zero TTL a

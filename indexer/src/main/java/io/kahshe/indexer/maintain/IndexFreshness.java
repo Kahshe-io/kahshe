@@ -2,6 +2,9 @@ package io.kahshe.indexer.maintain;
 
 import io.kahshe.common.Metrics;
 import io.kahshe.common.BoundedCache;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import org.slf4j.Logger;
@@ -12,7 +15,8 @@ import org.slf4j.LoggerFactory;
  * indexing" — the failure that costs correctness while producing no error, no log and no counter
  * movement. For every (prefix, namespace, table) observed declaring an index column it keeps the
  * snapshot last seen, the snapshot last covered by a completed maintenance pass, and when each
- * happened; the derived gauges are registered on {@link Metrics}.
+ * happened; the derived gauges are registered on {@link Metrics}, and {@link #entries()} hands
+ * the same set to the admin port's per-table status.
  *
  * <p>Per-process and not durable: a restart legitimately resets it to empty, and a replica that
  * never sees a table's loadTable traffic never tracks that table. Bounded to {@link #MAX_TRACKED}
@@ -33,16 +37,26 @@ public final class IndexFreshness {
 
   private static final long UNSET = Long.MIN_VALUE;
 
-  /** Times are wall-clock ms, 0 = never. A table is behind while its observation is uncovered. */
-  private record Entry(
+  /**
+   * One table's freshness. Times are wall-clock ms, 0 = never. A table is behind while its
+   * observation is uncovered. Carries its own key so {@link #entries()} can hand the tracked set
+   * out from the cache's value copy, which is the only view the cache gives.
+   */
+  public record Entry(
+      String key,
       long observedSnapshot,
       long observedAtMs,
       long builtSnapshot,
       long builtAtMs,
       long behindSinceMs,
       long lastWarnAtMs) {
-    boolean behind() {
+    public boolean behind() {
       return observedSnapshot != builtSnapshot;
+    }
+
+    /** False until a maintenance pass has covered this table: {@link #builtSnapshot} is then noise. */
+    public boolean hasBuild() {
+      return builtSnapshot != UNSET;
     }
   }
 
@@ -66,6 +80,7 @@ public final class IndexFreshness {
     metrics.indexTablesBehind = this::tablesBehind;
     metrics.indexMaxBehindSeconds = this::maxBehindSeconds;
     metrics.indexLastBuildAgeSeconds = this::lastBuildAgeSeconds;
+    metrics.indexBehindByTable = this::behindByTable;
   }
 
   /**
@@ -80,10 +95,11 @@ public final class IndexFreshness {
     Entry existing = tracked.get(key);
     Entry updated;
     if (existing == null) {
-      updated = new Entry(snapshotId, now, UNSET, 0, now, 0);
+      updated = new Entry(key, snapshotId, now, UNSET, 0, now, 0);
     } else if (existing.observedSnapshot() == snapshotId) {
       updated =
           new Entry(
+              key,
               snapshotId,
               now,
               existing.builtSnapshot(),
@@ -91,10 +107,12 @@ public final class IndexFreshness {
               existing.behindSinceMs(),
               existing.lastWarnAtMs());
     } else if (snapshotId == existing.builtSnapshot()) {
-      updated = new Entry(snapshotId, now, existing.builtSnapshot(), existing.builtAtMs(), 0, 0);
+      updated =
+          new Entry(key, snapshotId, now, existing.builtSnapshot(), existing.builtAtMs(), 0, 0);
     } else {
       updated =
           new Entry(
+              key,
               snapshotId,
               now,
               existing.builtSnapshot(),
@@ -120,7 +138,7 @@ public final class IndexFreshness {
     long now = nowMs.getAsLong();
     Entry existing = tracked.get(key);
     if (existing == null) {
-      tracked.put(key, new Entry(builtSnapshot, now, builtSnapshot, now, 0, 0));
+      tracked.put(key, new Entry(key, builtSnapshot, now, builtSnapshot, now, 0, 0));
       return;
     }
     boolean satisfied =
@@ -129,8 +147,9 @@ public final class IndexFreshness {
     tracked.put(
         key,
         satisfied
-            ? new Entry(builtSnapshot, now, builtSnapshot, now, 0, 0)
+            ? new Entry(key, builtSnapshot, now, builtSnapshot, now, 0, 0)
             : new Entry(
+                key,
                 existing.observedSnapshot(),
                 existing.observedAtMs(),
                 builtSnapshot,
@@ -152,6 +171,7 @@ public final class IndexFreshness {
     tracked.put(
         key,
         new Entry(
+            key,
             existing.observedSnapshot(),
             existing.observedAtMs(),
             UNSET,
@@ -193,6 +213,42 @@ public final class IndexFreshness {
   }
 
   /**
+   * The tables currently behind, as {@code namespace.table} to their {@link #behindSeconds}, for
+   * the per-table gauge. A current table has no entry, so the family lists only what needs
+   * attention; the prefix is dropped because it is a REST tenancy segment, not part of the name a
+   * query uses. Empty on a process that does not build, as the fleet gauges are.
+   */
+  Map<String, Long> behindByTable() {
+    if (!builds) {
+      return Map.of();
+    }
+    Map<String, Long> behind = new TreeMap<>();
+    for (Entry entry : tracked.values()) {
+      if (entry.behind()) {
+        behind.put(tableLabel(entry.key()), behindSeconds(entry));
+      }
+    }
+    return behind;
+  }
+
+  /**
+   * {@code namespace.table}, decoded, from a {@code prefix|namespace|table} key of raw path
+   * segments. A segment that does not decode keeps its raw form: a scrape must not fail over one
+   * odd table name.
+   */
+  static String tableLabel(String key) {
+    String[] parts = key.split("\\|", 3);
+    if (parts.length < 3) {
+      return key;
+    }
+    try {
+      return IndexerService.decodeIdent(parts[1], parts[2]).toString();
+    } catch (IllegalArgumentException e) {
+      return parts[1] + "." + parts[2];
+    }
+  }
+
+  /**
    * Age of the most recent completed maintenance pass across tracked tables. 0 when nothing has
    * been built yet: a never-built process and a just-built one both read 0, so this is a
    * supporting signal only — {@link #maxBehindSeconds()} is the one to alert on.
@@ -203,6 +259,26 @@ public final class IndexFreshness {
       newest = Math.max(newest, entry.builtAtMs());
     }
     return newest == 0 ? 0 : Math.max(0, nowMs.getAsLong() - newest) / 1000;
+  }
+
+  /**
+   * The tracked set as it stands: an immutable copy of immutable entries, so a reader on the admin
+   * port can walk it while observations and builds keep landing, and can change nothing.
+   */
+  public List<Entry> entries() {
+    return tracked.values();
+  }
+
+  /**
+   * How long {@code entry} has been behind, by the rule {@link #maxBehindSeconds()} applies to
+   * the fleet gauge: 0 when current, at least 1 when not, and 0 on a process that does not
+   * build, which is not the one to raise the gap.
+   */
+  public long behindSeconds(Entry entry) {
+    if (!builds || !entry.behind()) {
+      return 0;
+    }
+    return behindSeconds(nowMs.getAsLong(), entry.behindSinceMs());
   }
 
   private static long behindSeconds(long now, long behindSinceMs) {
@@ -228,6 +304,7 @@ public final class IndexFreshness {
     tracked.put(
         key,
         new Entry(
+            key,
             entry.observedSnapshot(),
             entry.observedAtMs(),
             entry.builtSnapshot(),
