@@ -1,0 +1,3 @@
+# Test-only. A scanner from a source set the main services file knows nothing about: proof that
+# the pass's registry is the classpath, not a list inside ScanPass.
+io.kahshe.watch.scan.CountingScanner

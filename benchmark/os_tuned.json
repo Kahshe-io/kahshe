@@ -1,0 +1,15 @@
+{
+  "bench_tuned": {
+    "store_bytes": 179412073,
+    "ingest_s": 34.3,
+    "wildcard_p50_ms": {
+      "needle_1file": 4.11,
+      "common": 2.7
+    }
+  },
+  "bench_nosrc": {
+    "store_bytes": 329947366,
+    "segments": 1,
+    "note": "EXCLUDED from claims: _source disabled triggers _recovery_source retention (peer-recovery stored field, reclaimed only after retention lease expiry), so store is INFLATED (330MB > 179MB tuned-with-source). Pure-index bytes come from the Lucene extension breakdown of the default index instead."
+  }
+}

@@ -1,0 +1,420 @@
+{
+  "env": {
+    "host": {
+      "chip": "Apple M4 Max",
+      "ncpu": 16,
+      "mem_bytes": 68719476736
+    },
+    "docker_vm": {
+      "ncpu": 16,
+      "mem_bytes": 8217190400
+    },
+    "pyarrow_cpu_cap": 16,
+    "versions": {
+      "opensearch": "3.8.0",
+      "iceberg": "1.11.0",
+      "pyarrow": "25.0.1"
+    },
+    "topology": "OpenSearch in Docker Desktop Linux VM, data on named volume (VM-native fs). Polaris in same VM. kahshe JVM and pyarrow scan run natively on the macOS host against host-local parquet; pyarrow capped to VM core count. Residual asymmetry: OS is CPU-limited to the VM; kahshe scan I/O path is host APFS. Corpus fits in page cache on both sides: this is a warm, CPU-bound comparison."
+  },
+  "queries": {
+    "needle_1file": {
+      "desc": "substring, 35 rows in 2 files (incl. mixed-case confounder)",
+      "os": {
+        "wildcard": {
+          "p50_ms": 2.49,
+          "p90_ms": 2.75,
+          "min_ms": 2.24,
+          "max_ms": 3.49,
+          "n": 30,
+          "label": "substring (gated)",
+          "took_p50_ms": 1.0,
+          "count": 35,
+          "matches_oracle": true,
+          "cache_suspect": false
+        }
+      },
+      "os_labeled": {
+        "phrase": {
+          "p50_ms": 1.89,
+          "p90_ms": 2.3,
+          "min_ms": 1.62,
+          "max_ms": 2.55,
+          "n": 30,
+          "label": "token-phrase, different semantics",
+          "count": 45,
+          "oracle_delta": 10,
+          "cache_suspect": true
+        }
+      },
+      "kahshe": {
+        "p50_ms": 5.42,
+        "p90_ms": 6.0,
+        "min_ms": 4.88,
+        "max_ms": 6.26,
+        "n": 30,
+        "plan_p50_ms": 1.65,
+        "files_scanned": 2,
+        "files_total": 50,
+        "files_truly_matching": 2,
+        "count": 35,
+        "matches_oracle": true
+      },
+      "oracle_count": 35,
+      "id_sets_match": true
+    },
+    "needle_3files": {
+      "desc": "substring, 120 rows in 3 files",
+      "os": {
+        "wildcard": {
+          "p50_ms": 2.78,
+          "p90_ms": 3.17,
+          "min_ms": 2.3,
+          "max_ms": 3.91,
+          "n": 30,
+          "label": "substring (gated)",
+          "took_p50_ms": 1.0,
+          "count": 120,
+          "matches_oracle": true,
+          "cache_suspect": false
+        }
+      },
+      "os_labeled": {
+        "phrase": {
+          "p50_ms": 1.99,
+          "p90_ms": 2.38,
+          "min_ms": 1.74,
+          "max_ms": 2.86,
+          "n": 30,
+          "label": "token-phrase, different semantics",
+          "count": 120,
+          "oracle_delta": 0,
+          "cache_suspect": true
+        }
+      },
+      "kahshe": {
+        "p50_ms": 5.57,
+        "p90_ms": 6.07,
+        "min_ms": 5.1,
+        "max_ms": 6.14,
+        "n": 30,
+        "plan_p50_ms": 1.59,
+        "files_scanned": 3,
+        "files_total": 50,
+        "files_truly_matching": 3,
+        "count": 120,
+        "matches_oracle": true
+      },
+      "oracle_count": 120,
+      "id_sets_match": true
+    },
+    "scattered_50files": {
+      "desc": "substring, 100 rows spread over ALL 50 files (defeats file pruning)",
+      "os": {
+        "wildcard": {
+          "p50_ms": 2.68,
+          "p90_ms": 3.24,
+          "min_ms": 2.34,
+          "max_ms": 3.34,
+          "n": 30,
+          "label": "substring (gated)",
+          "took_p50_ms": 1.0,
+          "count": 100,
+          "matches_oracle": true,
+          "cache_suspect": false
+        }
+      },
+      "os_labeled": {},
+      "kahshe": {
+        "p50_ms": 34.39,
+        "p90_ms": 34.92,
+        "min_ms": 33.91,
+        "max_ms": 35.95,
+        "n": 30,
+        "plan_p50_ms": 2.0,
+        "files_scanned": 50,
+        "files_total": 50,
+        "files_truly_matching": 50,
+        "count": 100,
+        "matches_oracle": true
+      },
+      "oracle_count": 100,
+      "id_sets_match": true
+    },
+    "absent": {
+      "desc": "term that exists nowhere",
+      "os": {
+        "wildcard": {
+          "p50_ms": 2.85,
+          "p90_ms": 3.11,
+          "min_ms": 2.37,
+          "max_ms": 3.51,
+          "n": 30,
+          "label": "substring (gated)",
+          "took_p50_ms": 1.0,
+          "count": 0,
+          "matches_oracle": true,
+          "cache_suspect": false
+        }
+      },
+      "os_labeled": {},
+      "kahshe": {
+        "p50_ms": 1.06,
+        "p90_ms": 1.46,
+        "min_ms": 0.84,
+        "max_ms": 3.0,
+        "n": 30,
+        "plan_p50_ms": 1.03,
+        "files_scanned": 0,
+        "files_total": 50,
+        "files_truly_matching": 0,
+        "count": 0,
+        "matches_oracle": true
+      },
+      "oracle_count": 0
+    },
+    "mid_10files": {
+      "desc": "substring, 10.5k rows in 10 files (incl. 'checkpoint-stalled' superstring)",
+      "os": {
+        "wildcard": {
+          "p50_ms": 2.36,
+          "p90_ms": 3.0,
+          "min_ms": 2.15,
+          "max_ms": 4.88,
+          "n": 30,
+          "label": "substring (gated)",
+          "took_p50_ms": 0.0,
+          "count": 10500,
+          "matches_oracle": true,
+          "cache_suspect": false
+        }
+      },
+      "os_labeled": {
+        "phrase": {
+          "p50_ms": 1.54,
+          "p90_ms": 1.68,
+          "min_ms": 1.23,
+          "max_ms": 1.91,
+          "n": 30,
+          "label": "token-phrase, misses superstring",
+          "count": 10000,
+          "oracle_delta": -500,
+          "cache_suspect": true
+        }
+      },
+      "kahshe": {
+        "p50_ms": 10.36,
+        "p90_ms": 10.67,
+        "min_ms": 9.83,
+        "max_ms": 10.98,
+        "n": 30,
+        "plan_p50_ms": 1.68,
+        "files_scanned": 10,
+        "files_total": 50,
+        "files_truly_matching": 10,
+        "count": 10500,
+        "matches_oracle": true
+      },
+      "oracle_count": 10500
+    },
+    "common_noprune": {
+      "desc": "substring in ~20% of rows, all files (kahshe full-scan worst case)",
+      "os": {
+        "wildcard": {
+          "p50_ms": 2.19,
+          "p90_ms": 2.64,
+          "min_ms": 1.83,
+          "max_ms": 3.28,
+          "n": 30,
+          "label": "substring (gated)",
+          "took_p50_ms": 0.0,
+          "count": 399912,
+          "matches_oracle": true,
+          "cache_suspect": false
+        }
+      },
+      "os_labeled": {
+        "match": {
+          "p50_ms": 1.84,
+          "p90_ms": 2.31,
+          "min_ms": 1.38,
+          "max_ms": 2.67,
+          "n": 30,
+          "label": "token, misses 'reconnection'",
+          "count": 319731,
+          "oracle_delta": -80181,
+          "cache_suspect": true
+        }
+      },
+      "kahshe": {
+        "p50_ms": 34.49,
+        "p90_ms": 34.72,
+        "min_ms": 33.94,
+        "max_ms": 35.22,
+        "n": 30,
+        "plan_p50_ms": 1.88,
+        "files_scanned": 50,
+        "files_total": 50,
+        "files_truly_matching": 50,
+        "count": 399912,
+        "matches_oracle": true
+      },
+      "oracle_count": 399912
+    },
+    "composed_range_needle": {
+      "desc": "id >= 1.15M AND cell-drain-alpha (standard + extension)",
+      "os": {
+        "bool_wildcard": {
+          "p50_ms": 2.69,
+          "p90_ms": 3.4,
+          "min_ms": 2.18,
+          "max_ms": 4.1,
+          "n": 30,
+          "label": "substring+range (gated)",
+          "took_p50_ms": 1.0,
+          "count": 40,
+          "matches_oracle": true,
+          "cache_suspect": false
+        }
+      },
+      "os_labeled": {},
+      "kahshe": {
+        "p50_ms": 4.93,
+        "p90_ms": 5.24,
+        "min_ms": 4.42,
+        "max_ms": 5.54,
+        "n": 30,
+        "plan_p50_ms": 1.34,
+        "files_scanned": 1,
+        "files_total": 50,
+        "files_truly_matching": 3,
+        "count": 40,
+        "matches_oracle": true
+      },
+      "oracle_count": 40,
+      "id_sets_match": true
+    },
+    "exact_eq": {
+      "desc": "full-message equality (standard protocol both sides)",
+      "os": {
+        "term_raw": {
+          "p50_ms": 1.76,
+          "p90_ms": 1.96,
+          "min_ms": 1.5,
+          "max_ms": 2.16,
+          "n": 30,
+          "label": "exact (gated)",
+          "took_p50_ms": 0.0,
+          "count": 4,
+          "matches_oracle": true,
+          "cache_suspect": true
+        }
+      },
+      "os_labeled": {},
+      "kahshe": {
+        "p50_ms": 33.38,
+        "p90_ms": 33.78,
+        "min_ms": 32.65,
+        "max_ms": 34.55,
+        "n": 30,
+        "plan_p50_ms": 2.03,
+        "files_scanned": 50,
+        "files_total": 50,
+        "files_truly_matching": null,
+        "count": 4,
+        "matches_oracle": true
+      },
+      "oracle_count": 4,
+      "id_sets_match": true
+    },
+    "prefix": {
+      "desc": "message prefix (standard starts-with; grams common -> no pruning expected)",
+      "os": {
+        "prefix_raw": {
+          "p50_ms": 1.81,
+          "p90_ms": 2.21,
+          "min_ms": 1.47,
+          "max_ms": 2.92,
+          "n": 30,
+          "label": "prefix (gated)",
+          "took_p50_ms": 0.0,
+          "count": 3531,
+          "matches_oracle": true,
+          "cache_suspect": true
+        }
+      },
+      "os_labeled": {},
+      "kahshe": {
+        "p50_ms": 32.6,
+        "p90_ms": 33.07,
+        "min_ms": 32.03,
+        "max_ms": 34.48,
+        "n": 30,
+        "plan_p50_ms": 1.86,
+        "files_scanned": 50,
+        "files_total": 50,
+        "files_truly_matching": null,
+        "count": 3531,
+        "matches_oracle": true
+      },
+      "oracle_count": 3531
+    },
+    "id_range_only": {
+      "desc": "pure numeric range, no text (Iceberg stats strength)",
+      "os": {
+        "range": {
+          "p50_ms": 1.93,
+          "p90_ms": 2.26,
+          "min_ms": 1.61,
+          "max_ms": 2.43,
+          "n": 30,
+          "label": "range (gated)",
+          "took_p50_ms": 0.0,
+          "count": 40000,
+          "matches_oracle": true,
+          "cache_suspect": true
+        }
+      },
+      "os_labeled": {},
+      "kahshe": {
+        "p50_ms": 1.18,
+        "p90_ms": 1.44,
+        "min_ms": 1.01,
+        "max_ms": 2.61,
+        "n": 30,
+        "plan_p50_ms": 0.86,
+        "files_scanned": 1,
+        "files_total": 50,
+        "files_truly_matching": null,
+        "count": 40000,
+        "matches_oracle": true
+      },
+      "oracle_count": 40000
+    }
+  },
+  "validation": {},
+  "storage": {
+    "parquet_bytes": 33120412,
+    "bloom_index_bytes_raw": 212512,
+    "bloom_leaf_on_disk_bytes": 60328,
+    "bloom_config": {
+      "ngram": 3,
+      "target_fpp": 0.01
+    },
+    "opensearch_store_bytes": 309016322,
+    "opensearch_lucene_breakdown": {
+      "stored_fields(_source)": 98638821,
+      "inverted_index": 155996880,
+      "doc_values": 46075011,
+      "points": 6319483,
+      "norms": 2000468,
+      "other": 210969
+    },
+    "files_total": 50
+  },
+  "build": {
+    "os_ingest_s": 34.78944420814514,
+    "os_forcemerge_s": 4.01166296005249,
+    "os_ingest_note": "untuned single-client bulk, chunk=5000"
+  }
+}

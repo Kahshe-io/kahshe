@@ -1,0 +1,45 @@
+{{- if and .Values.tls.enabled .Values.tls.certManager.enabled }}
+# cert-manager issues and renews the certificate the pods mount. kahshe re-reads its certificate
+# files while it runs, so a renewal takes effect on the next handshake without a restart or a
+# rollout — which is the whole reason to let cert-manager own the lifecycle rather than baking a
+# certificate into a Secret by hand.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "kahshe.fullname" . }}-tls
+  labels:
+    {{- include "kahshe.labels" . | nindent 4 }}
+spec:
+  # The Secret the deployments mount. Same name as tls.secretName so the two cannot drift.
+  secretName: {{ .Values.tls.secretName }}
+  {{- with .Values.tls.certManager.duration }}
+  duration: {{ . }}
+  {{- end }}
+  {{- with .Values.tls.certManager.renewBefore }}
+  renewBefore: {{ . }}
+  {{- end }}
+  privateKey:
+    algorithm: {{ .Values.tls.certManager.keyAlgorithm }}
+    size: {{ .Values.tls.certManager.keySize }}
+    # PKCS#8 because that is what kahshe reads; PKCS#1 is refused at startup with the openssl
+    # command that converts it, and there is no reason to make anyone run it.
+    encoding: PKCS8
+    rotationPolicy: Always
+  dnsNames:
+    {{- if .Values.tls.certManager.dnsNames }}
+    {{- toYaml .Values.tls.certManager.dnsNames | nindent 4 }}
+    {{- else }}
+    - {{ include "kahshe.fullname" . }}
+    - {{ include "kahshe.fullname" . }}.{{ .Release.Namespace }}
+    - {{ include "kahshe.fullname" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "kahshe.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+    {{- end }}
+  {{- with .Values.tls.certManager.ipAddresses }}
+  ipAddresses:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  issuerRef:
+    name: {{ required "tls.certManager.issuerRef.name is required when tls.certManager.enabled" .Values.tls.certManager.issuerRef.name }}
+    kind: {{ .Values.tls.certManager.issuerRef.kind }}
+    group: {{ .Values.tls.certManager.issuerRef.group }}
+{{- end }}

@@ -1,0 +1,14 @@
+# Stock Spark 3.5 + Iceberg 1.11, nothing of kahshe's in it: the "no jar, no plugin" engine of
+# docs/ARCHITECTURE.md §0 item 8(a). The Iceberg jars are fetched here, at image build time on the
+# workstation, so the lab job needs no egress and the image names exactly what it runs.
+FROM apache/spark:3.5.3-scala2.12-java17-python3-ubuntu
+USER root
+ARG ICEBERG=1.11.0
+ADD https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/${ICEBERG}/iceberg-spark-runtime-3.5_2.12-${ICEBERG}.jar /opt/spark/jars/
+ADD https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG}/iceberg-aws-bundle-${ICEBERG}.jar /opt/spark/jars/
+RUN chmod 644 /opt/spark/jars/iceberg-*.jar
+# Only Iceberg's scan reports at INFO: they carry result/skipped data files per query, which is
+# the pruning evidence a stock engine gives without any instrumentation of ours.
+COPY benchmark/evidence/spark-log4j2.properties /opt/spark/conf/log4j2.properties
+COPY benchmark/evidence/spark-needle.py /opt/spark/work-dir/spark-needle.py
+USER spark

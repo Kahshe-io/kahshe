@@ -1,0 +1,16 @@
+{
+  "column": "msg",
+  "list-column": "tags",
+  "list-analyzer": "value",
+  "files": [
+    { "name": "f1.parquet",
+      "rows": ["Hello WORLD hello", "the quick brown fox", "trace=abc123def"],
+      "tags": [["alpha", "bravo"], ["alpha", "alpha"], ["connection", "refused"]] },
+    { "name": "f2.parquet",
+      "rows": ["hello again world", "192.168.0.1 GET /index.html 200", "ab😀cd"],
+      "tags": [["bravo"], null, []] },
+    { "name": "f3.parquet",
+      "rows": ["quorum lost", "kahshe kahshe kahshe", "b7f3c9d2e4a1", "ok"],
+      "tags": [["zulu"], ["alpha"], [], ["charlie", "zulu"]] }
+  ]
+}

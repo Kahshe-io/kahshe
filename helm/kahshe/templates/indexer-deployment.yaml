@@ -1,0 +1,132 @@
+{{- if .Values.indexer.enabled }}
+{{/*
+An indexer FLEET: N replicas that share the columns of the tables the rules name, each taking a
+column's build lease and skipping the ones another member holds (see indexer/README.md,
+item 14). Deliberately NOT the watcher:
+
+  - sink `none`: a member evaluates its own builds so the alerts land in the build report it
+    writes, and ONE watch instance delivers from those reports, keeping alert dedup in a single
+    process. N members delivering would mean N copies of every alert.
+  - row scan off: the scan is not lease-coordinated, so N members would each read every new data
+    file and each raise the same alerts. The watcher does the scanning.
+
+A Deployment rather than a StatefulSet because no member owns anything durable; the claim order
+comes from the pod name either way.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kahshe.fullname" . }}-indexer
+  labels:
+    {{- include "kahshe.labels" . | nindent 4 }}
+    app.kubernetes.io/component: indexer
+spec:
+  replicas: {{ .Values.indexer.replicas }}
+  selector:
+    matchLabels:
+      {{- include "kahshe.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: indexer
+  template:
+    metadata:
+      labels:
+        {{- include "kahshe.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: indexer
+      annotations:
+        {{- include "kahshe.metricsAnnotations" . | nindent 8 }}
+        {{- with .Values.indexer.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "kahshe.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # A member killed mid-build releases its lease in its shutdown hook, so the next pod does
+      # not refuse the column for the lease's TTL. See format/README.md on BuildLease.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: kahshe-indexer
+          image: {{ include "kahshe.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - { containerPort: {{ .Values.service.adminPort }}, name: admin }
+          env:
+            - name: KAHSHE_MODE
+              value: "watch"
+            - name: KAHSHE_ADMIN_PORT
+              value: {{ .Values.service.adminPort | quote }}
+            - name: KAHSHE_INDEXER
+              value: "true"
+            - name: KAHSHE_INDEX_FLEET
+              value: "true"
+            {{- with .Values.indexer.fleetOrdinal }}
+            - name: KAHSHE_INDEX_FLEET_ORDINAL
+              value: {{ . | int64 | quote }}
+            {{- end }}
+            {{- include "kahshe.backendEnv" . | nindent 12 }}
+{{- if .Values.tls.enabled }}
+            {{- include "kahshe.tlsEnv" . | nindent 12 }}
+{{- end }}
+            - name: KAHSHE_WATCH_RULES
+              value: /etc/kahshe/rules/watch-rules.yaml
+            # Builders write the build report; the watch instance delivers from it.
+            - name: KAHSHE_WATCH_SINK
+              value: "none"
+            # The scan is the watcher's job: it is not lease-coordinated, so N members would each
+            # read every new data file.
+            - name: KAHSHE_WATCH_SCAN
+              value: "false"
+            {{- include "kahshe.buildEnv" .Values.indexer.build | nindent 12 }}
+            {{- include "kahshe.extraEnv" .Values.indexer.env | nindent 12 }}
+            {{- with .Values.indexer.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /healthz, port: admin, scheme: {{ include "kahshe.probeScheme" . }} }
+            failureThreshold: 30
+            periodSeconds: 2
+          livenessProbe:
+            httpGet: { path: /healthz, port: admin, scheme: {{ include "kahshe.probeScheme" . }} }
+            periodSeconds: 30
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.indexer.resources | nindent 12 }}
+          volumeMounts:
+{{- if .Values.tls.enabled }}
+            {{- include "kahshe.tlsMounts" . | nindent 12 }}
+{{- end }}
+            # java.io.tmpdir: the S3 client stages every upload here; the root filesystem is read-only
+            - { name: tmp, mountPath: /tmp }
+            - { name: rules, mountPath: /etc/kahshe/rules, readOnly: true }
+            - { name: term-build, mountPath: /tmp/kahshe-term-build }
+      volumes:
+{{- if .Values.tls.enabled }}
+        {{- include "kahshe.tlsVolumes" . | nindent 8 }}
+{{- end }}
+        - name: tmp
+          emptyDir: { sizeLimit: {{ .Values.tmpSizeLimit }} }
+        - name: rules
+          configMap:
+            name: {{ default (printf "%s-watch-rules" (include "kahshe.fullname" .)) .Values.watch.existingRulesConfigMap }}
+        - name: term-build
+          emptyDir: { sizeLimit: {{ .Values.indexer.build.scratchSizeLimit }} }
+      {{- with .Values.indexer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

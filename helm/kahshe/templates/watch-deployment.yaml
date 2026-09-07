@@ -1,0 +1,125 @@
+{{- if .Values.watch.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kahshe.fullname" . }}-watch
+  labels:
+    {{- include "kahshe.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watch
+spec:
+  replicas: 1   # one: alert dedup and build claims are per process
+  selector:
+    matchLabels:
+      {{- include "kahshe.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: watch
+  template:
+    metadata:
+      labels:
+        {{- include "kahshe.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: watch
+      annotations:
+        {{- include "kahshe.metricsAnnotations" . | nindent 8 }}
+        {{- with .Values.watch.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "kahshe.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: kahshe-watch
+          image: {{ include "kahshe.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - { containerPort: {{ .Values.service.adminPort }}, name: admin }
+          env:
+            - name: KAHSHE_MODE
+              value: "watch"
+            - name: KAHSHE_ADMIN_PORT
+              value: {{ .Values.service.adminPort | quote }}
+            - name: KAHSHE_INDEXER
+              value: {{ .Values.watch.indexer | quote }}
+            {{- include "kahshe.backendEnv" . | nindent 12 }}
+{{- if .Values.tls.enabled }}
+            {{- include "kahshe.tlsEnv" . | nindent 12 }}
+{{- end }}
+            - name: KAHSHE_WATCH_RULES
+              value: /etc/kahshe/rules/watch-rules.yaml
+            - name: KAHSHE_WATCH_SINK
+              value: {{ .Values.watch.sink | default "webhook" | quote }}
+            {{- if eq (.Values.watch.sink | default "webhook") "webhook" }}
+            - name: KAHSHE_WATCH_WEBHOOK
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.watch.webhookSecret }}, key: url }
+            - name: KAHSHE_WATCH_WEBHOOK_AUTH
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.watch.webhookSecret }}, key: auth, optional: true }
+            {{- end }}
+            - name: KAHSHE_WATCH_SCAN
+              value: {{ if kindIs "invalid" .Values.watch.scan }}"true"{{ else }}{{ .Values.watch.scan | quote }}{{ end }}
+            - name: KAHSHE_WATCH_SCAN_THREADS
+              value: {{ .Values.watch.scanThreads | default 4 | quote }}
+            {{- if .Values.watch.indexer }}
+            {{- include "kahshe.buildEnv" .Values.watch.build | nindent 12 }}
+            {{- end }}
+            {{- include "kahshe.extraEnv" .Values.watch.env | nindent 12 }}
+            {{- with .Values.watch.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /healthz, port: admin, scheme: {{ include "kahshe.probeScheme" . }} }
+            failureThreshold: 30
+            periodSeconds: 2
+          livenessProbe:
+            httpGet: { path: /healthz, port: admin, scheme: {{ include "kahshe.probeScheme" . }} }
+            periodSeconds: 30
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.watch.resources | nindent 12 }}
+          volumeMounts:
+{{- if .Values.tls.enabled }}
+            {{- include "kahshe.tlsMounts" . | nindent 12 }}
+{{- end }}
+            # java.io.tmpdir: the S3 client stages every upload here; the root filesystem is read-only
+            - { name: tmp, mountPath: /tmp }
+            # whole-volume mount, deliberately not subPath: subPath pins one file and never sees
+            # ConfigMap updates, which breaks the mtime-based hot reload of the rules
+            - { name: rules, mountPath: /etc/kahshe/rules, readOnly: true }
+            {{- if .Values.watch.indexer }}
+            - { name: term-build, mountPath: /tmp/kahshe-term-build }
+            {{- end }}
+      volumes:
+{{- if .Values.tls.enabled }}
+        {{- include "kahshe.tlsVolumes" . | nindent 8 }}
+{{- end }}
+        - name: tmp
+          emptyDir: { sizeLimit: {{ .Values.tmpSizeLimit }} }
+        - name: rules
+          configMap:
+            name: {{ default (printf "%s-watch-rules" (include "kahshe.fullname" .)) .Values.watch.existingRulesConfigMap }}
+        {{- if .Values.watch.indexer }}
+        - name: term-build
+          emptyDir: { sizeLimit: {{ .Values.watch.build.scratchSizeLimit }} }
+        {{- end }}
+      {{- with .Values.watch.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.watch.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.watch.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

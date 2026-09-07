@@ -1,0 +1,14 @@
+{{/* The rules the watcher evaluates and the indexer fleet discovers by: one ConfigMap, mounted
+     by both, so the two roles cannot drift onto different rule sets. */}}
+{{- if and (or .Values.watch.enabled .Values.indexer.enabled) (not .Values.watch.existingRulesConfigMap) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kahshe.fullname" . }}-watch-rules
+  labels:
+    {{- include "kahshe.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watch
+data:
+  watch-rules.yaml: |
+    {{- required "watch.enabled or indexer.enabled needs watch.rules (the rules YAML) or watch.existingRulesConfigMap" .Values.watch.rules | nindent 4 }}
+{{- end }}

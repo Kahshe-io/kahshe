@@ -1,0 +1,214 @@
+{
+  "format-version" : 1,
+  "kahshe.format-version" : 2,
+  "analyzer" : "kahshe-ascii-v3-max256",
+  "grams" : "kahshe-grams-v2-n3",
+  "queries" : [ {
+    "kind" : "MATCH",
+    "value" : "hello",
+    "kept" : [ "f1.parquet", "f2.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "world",
+    "kept" : [ "f1.parquet", "f2.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "fox",
+    "kept" : [ "f1.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "192.168.0.1",
+    "kept" : [ "f2.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "168",
+    "kept" : [ "f2.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "abc123def",
+    "kept" : [ "f1.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "kahshe",
+    "kept" : [ "f3.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "zzz",
+    "kept" : [ ]
+  }, {
+    "kind" : "CONTAINS",
+    "value" : "quick brown",
+    "kept" : [ "f1.parquet" ]
+  }, {
+    "kind" : "CONTAINS",
+    "value" : "HELLO",
+    "kept" : [ "f1.parquet", "f2.parquet" ]
+  }, {
+    "kind" : "CONTAINS",
+    "value" : "b\uD83D\uDE00c",
+    "kept" : [ "f2.parquet" ]
+  }, {
+    "kind" : "CONTAINS",
+    "value" : "\uD83D\uDE00c",
+    "kept" : [ "f1.parquet", "f2.parquet", "f3.parquet" ]
+  }, {
+    "kind" : "CONTAINS",
+    "value" : "zzq",
+    "kept" : [ ]
+  }, {
+    "kind" : "CONTAINS",
+    "value" : "9d2e",
+    "kept" : [ "f3.parquet" ]
+  }, {
+    "kind" : "PREFIX",
+    "value" : "hel",
+    "kept" : [ "f1.parquet", "f2.parquet" ]
+  }, {
+    "kind" : "PREFIX",
+    "value" : "19",
+    "kept" : [ "f2.parquet" ]
+  }, {
+    "kind" : "PREFIX",
+    "value" : "zz",
+    "kept" : [ ]
+  } ],
+  "counts" : {
+    "hello" : {
+      "files" : 2,
+      "total" : 3
+    },
+    "world" : {
+      "files" : 2,
+      "total" : 2
+    },
+    "kahshe" : {
+      "files" : 1,
+      "total" : 3
+    },
+    "192.168.0.1" : {
+      "files" : 1,
+      "total" : 1
+    },
+    "zzz" : null
+  },
+  "list-queries" : [ {
+    "kind" : "MATCH",
+    "value" : "alpha",
+    "kept" : [ "f1.parquet", "f3.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "bravo",
+    "kept" : [ "f1.parquet", "f2.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "zulu",
+    "kept" : [ "f3.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "charlie",
+    "kept" : [ "f3.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "connection",
+    "kept" : [ "f1.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "refused",
+    "kept" : [ "f1.parquet" ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "connectionrefused",
+    "kept" : [ ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "connection refused",
+    "kept" : [ ]
+  }, {
+    "kind" : "MATCH",
+    "value" : "zzz",
+    "kept" : [ ]
+  }, {
+    "kind" : "PREFIX",
+    "value" : "al",
+    "kept" : [ "f1.parquet", "f3.parquet" ]
+  }, {
+    "kind" : "PREFIX",
+    "value" : "zz",
+    "kept" : [ ]
+  } ],
+  "list-counts" : {
+    "alpha" : {
+      "files" : 2,
+      "total" : 3
+    },
+    "bravo" : {
+      "files" : 2,
+      "total" : 2
+    },
+    "zulu" : {
+      "files" : 1,
+      "total" : 2
+    },
+    "connection" : {
+      "files" : 1,
+      "total" : 1
+    },
+    "connection refused" : null,
+    "zzz" : null
+  },
+  "list-analyzer" : "kahshe-value-v1-max256",
+  "analyzer-vectors" : {
+    "kahshe-ascii-v3-max256" : {
+      "Hello WORLD hello" : [ "hello", "world", "hello" ],
+      "192.168.0.1 GET /index.html 200" : [ "192", "168", "0", "1", "192.168.0.1", "get", "index", "html", "200" ],
+      "trace=abc123def" : [ "trace", "abc123def" ],
+      "ab\uD83D\uDE00cd" : [ "ab", "cd" ],
+      "550e8400-e29b-41d4-a716-446655440000" : [ "550e8400", "e29b", "41d4", "a716", "446655440000", "550e8400-e29b-41d4-a716-446655440000" ],
+      "fe80::1" : [ "fe80", "1", "fe80::1" ],
+      "ok" : [ "ok" ],
+      "" : [ ]
+    },
+    "kahshe-value-v1-max256" : {
+      "Hello WORLD hello" : [ "Hello WORLD hello" ],
+      "192.168.0.1 GET /index.html 200" : [ "192.168.0.1 GET /index.html 200" ],
+      "trace=abc123def" : [ "trace=abc123def" ],
+      "ab\uD83D\uDE00cd" : [ "ab\uD83D\uDE00cd" ],
+      "550e8400-e29b-41d4-a716-446655440000" : [ "550e8400-e29b-41d4-a716-446655440000" ],
+      "fe80::1" : [ "fe80::1" ],
+      "ok" : [ "ok" ],
+      "" : [ ]
+    }
+  },
+  "gram-vectors" : {
+    "kahshe-grams-v2-n3" : {
+      "Hello WORLD hello" : [ " he", " wo", "d h", "ell", "hel", "ld ", "llo", "lo ", "o w", "orl", "rld", "wor" ],
+      "192.168.0.1 GET /index.html 200" : [ " /i", " 20", " ge", ".0.", ".1 ", ".16", ".ht", "/in", "0.1", "1 g", "168", "192", "2.1", "200", "68.", "8.0", "92.", "dex", "et ", "ex.", "get", "htm", "ind", "l 2", "ml ", "nde", "t /", "tml", "x.h" ],
+      "trace=abc123def" : [ "123", "23d", "3de", "=ab", "abc", "ace", "bc1", "c12", "ce=", "def", "e=a", "rac", "tra" ],
+      "ab\uD83D\uDE00cd" : [ "ab\uD83D\uDE00", "b\uD83D\uDE00c", "\uD83D\uDE00cd" ],
+      "550e8400-e29b-41d4-a716-446655440000" : [ "-41", "-44", "-a7", "-e2", "0-e", "00-", "000", "0e8", "16-", "1d4", "29b", "4-a", "400", "41d", "440", "446", "466", "50e", "544", "550", "554", "6-4", "655", "665", "716", "840", "9b-", "a71", "b-4", "d4-", "e29", "e84" ],
+      "fe80::1" : [ "0::", "80:", "::1", "e80", "fe8" ],
+      "ok" : [ "ok" ],
+      "" : [ "" ]
+    },
+    "kahshe-grams-v2-n4" : {
+      "Hello WORLD hello" : [ " hel", " wor", "d he", "ello", "hell", "ld h", "llo ", "lo w", "o wo", "orld", "rld ", "worl" ],
+      "192.168.0.1 GET /index.html 200" : [ " /in", " 200", " get", ".0.1", ".1 g", ".168", ".htm", "/ind", "0.1 ", "1 ge", "168.", "192.", "2.16", "68.0", "8.0.", "92.1", "dex.", "et /", "ex.h", "get ", "html", "inde", "l 20", "ml 2", "ndex", "t /i", "tml ", "x.ht" ],
+      "trace=abc123def" : [ "123d", "23de", "3def", "=abc", "abc1", "ace=", "bc12", "c123", "ce=a", "e=ab", "race", "trac" ],
+      "ab\uD83D\uDE00cd" : [ "ab\uD83D\uDE00c", "b\uD83D\uDE00cd" ],
+      "550e8400-e29b-41d4-a716-446655440000" : [ "-41d", "-446", "-a71", "-e29", "0-e2", "00-e", "0000", "0e84", "16-4", "1d4-", "29b-", "4-a7", "400-", "4000", "41d4", "4400", "4466", "4665", "50e8", "5440", "550e", "5544", "6-44", "6554", "6655", "716-", "8400", "9b-4", "a716", "b-41", "d4-a", "e29b", "e840" ],
+      "fe80::1" : [ "0::1", "80::", "e80:", "fe80" ],
+      "ok" : [ "ok" ],
+      "" : [ "" ]
+    },
+    "kahshe-grams-v1" : {
+      "Hello WORLD hello" : [ " he", " wo", "d h", "ell", "hel", "ld ", "llo", "lo ", "o w", "orl", "rld", "wor" ],
+      "192.168.0.1 GET /index.html 200" : [ " /i", " 20", " ge", ".0.", ".1 ", ".16", ".ht", "/in", "0.1", "1 g", "168", "192", "2.1", "200", "68.", "8.0", "92.", "dex", "et ", "ex.", "get", "htm", "ind", "l 2", "ml ", "nde", "t /", "tml", "x.h" ],
+      "trace=abc123def" : [ "123", "23d", "3de", "=ab", "abc", "ace", "bc1", "c12", "ce=", "def", "e=a", "rac", "tra" ],
+      "ab\uD83D\uDE00cd" : [ "ab\uD83D", "b\uD83D\uDE00", "\uD83D\uDE00c", "\uDE00cd" ],
+      "550e8400-e29b-41d4-a716-446655440000" : [ "-41", "-44", "-a7", "-e2", "0-e", "00-", "000", "0e8", "16-", "1d4", "29b", "4-a", "400", "41d", "440", "446", "466", "50e", "544", "550", "554", "6-4", "655", "665", "716", "840", "9b-", "a71", "b-4", "d4-", "e29", "e84" ],
+      "fe80::1" : [ "0::", "80:", "::1", "e80", "fe8" ],
+      "ok" : [ "ok" ],
+      "" : [ "" ]
+    }
+  }
+}

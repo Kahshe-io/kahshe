@@ -1,0 +1,16 @@
+rules:
+  - id: 00000000-0000-4000-8000-000000000011
+    title: Many client errors from one address
+    severity: medium
+    prefix: lakehouse
+    table: logs.httplogs
+    detection:
+      sel0:
+        - { column: status, equals: [404] }
+      condition: sel0
+    window:
+      ts_column: ts
+      timeframe: 3600s
+      count: 3
+      group_by:
+        - clientip

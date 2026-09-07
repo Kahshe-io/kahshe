@@ -1,0 +1,65 @@
+# kahshe watch rules. Point KAHSHE_WATCH_RULES at this file; it is re-read
+# whenever its mtime changes (checked at each index build start and each
+# discovery poll). Rules are prospective only: they evaluate data files as
+# they are indexed, never retroactively. An invalid rule is skipped with a
+# WARN and counted (kahshe_watch_rules_skipped_total); the rest still load.
+rules:
+  # Token rule: exact per-file occurrence counts from the term index.
+  # Each match entry must be a single token under the kahshe-ascii-v1
+  # analyzer (lowercase alphanumeric run — "connection refused" is two
+  # tokens and would be rejected). min_count is the total occurrences of the
+  # rule's tokens within ONE file before the rule fires.
+  - id: error-burst
+    title: Error burst in event logs
+    severity: high
+    prefix: lakehouse          # catalog prefix, exactly as engines address it
+    table: logs.events         # ns.table — required, no wildcards
+    column: msg                # one declared column per rule
+    match: [error, exception]
+    condition: any-of          # any-of (default) | all-of, within the same file
+    min_count: 50
+
+  # Contains rule: the literal's 3-grams are probed against the file's exact
+  # gram set. Evidence confidence is "advisory" (gram co-occurrence, not a
+  # verified substring) — the alert's confirmation_sql is how an operator
+  # verifies it on their own engine. Literals must be at least 3 characters.
+  - id: credential-material
+    title: Possible credential material in event logs
+    severity: critical
+    prefix: lakehouse
+    table: logs.events
+    column: msg
+    contains: ["BEGIN RSA PRIVATE KEY", "aws_secret_access_key"]
+    condition: any-of
+
+  # Detection form: Sigma's shape. Every key but `condition` names a selection,
+  # whose entries are AND'ed; the condition is an expression over those names —
+  # and, or, not, parentheses, and the quantifiers `1 of` / `all of` over `them`
+  # or a name pattern. A condition naming a selection that does not exist, and a
+  # selection the condition never uses, are both refused: in practice each is a
+  # typo. Evaluated per ROW by the scan, so no column here need be indexed.
+  - id: service-install-not-benign
+    title: Service installed, excluding the known-good updater
+    severity: high
+    prefix: lakehouse
+    table: logs.events
+    detection:
+      selection:
+        - { column: provider_name, equals: ["Service Control Manager"] }
+        - { column: event_id, equals: [7045] }
+      filter:
+        - { column: service_name, contains: [benign-updater] }
+      condition: selection and not filter
+
+  # The operators no index can answer, which is why they run in the row scan:
+  # a regular expression and a numeric range.
+  - id: server-errors-from-odd-agents
+    title: 5xx responses from an agent matching a pattern
+    severity: medium
+    prefix: lakehouse
+    table: logs.events
+    where:
+      - { column: status, gte: [500], lt: [600] }
+      - { column: user_agent, re: ["^curl/[0-6]\\."] }
+    condition: all-of
+    min_count: 1

@@ -1,0 +1,173 @@
+{
+  "files_total": 10000,
+  "queries": {
+    "needle_1of10k": {
+      "kahshe_plan": {
+        "p50_ms": 29.24,
+        "p90_ms": 32.74,
+        "min_ms": 23.68,
+        "max_ms": 41.81,
+        "n": 30
+      },
+      "kahshe_e2e": {
+        "p50_ms": 107.53,
+        "p90_ms": 119.72,
+        "min_ms": 88.7,
+        "max_ms": 137.73,
+        "n": 30
+      },
+      "opensearch": {
+        "p50_ms": 24.12,
+        "p90_ms": 27.09,
+        "min_ms": 18.12,
+        "max_ms": 30.19,
+        "n": 30,
+        "took_p50_ms": 15.0
+      },
+      "files_kept": 1,
+      "response_bytes": 412,
+      "kahshe_rows": 1,
+      "os_count": 1,
+      "gate_ok": true
+    },
+    "mid_100files": {
+      "kahshe_plan": {
+        "p50_ms": 30.97,
+        "p90_ms": 94.13,
+        "min_ms": 26.72,
+        "max_ms": 115.73,
+        "n": 30
+      },
+      "kahshe_e2e": {
+        "p50_ms": 3950.37,
+        "p90_ms": 4212.37,
+        "min_ms": 3575.45,
+        "max_ms": 4438.69,
+        "n": 30
+      },
+      "opensearch": {
+        "p50_ms": 23.36,
+        "p90_ms": 24.97,
+        "min_ms": 17.9,
+        "max_ms": 28.92,
+        "n": 30,
+        "took_p50_ms": 14.0
+      },
+      "files_kept": 100,
+      "response_bytes": 31696,
+      "kahshe_rows": 100,
+      "os_count": 100,
+      "gate_ok": true
+    },
+    "absent": {
+      "kahshe_plan": {
+        "p50_ms": 26.56,
+        "p90_ms": 29.39,
+        "min_ms": 22.66,
+        "max_ms": 38.45,
+        "n": 30
+      },
+      "kahshe_e2e": {
+        "p50_ms": 26.89,
+        "p90_ms": 29.81,
+        "min_ms": 23.05,
+        "max_ms": 39.0,
+        "n": 30
+      },
+      "opensearch": {
+        "p50_ms": 19.97,
+        "p90_ms": 21.98,
+        "min_ms": 14.28,
+        "max_ms": 37.25,
+        "n": 30,
+        "took_p50_ms": 11.0
+      },
+      "files_kept": 0,
+      "response_bytes": 97,
+      "kahshe_rows": 0,
+      "os_count": 0,
+      "gate_ok": true
+    },
+    "common_structural": {
+      "kahshe_plan": {
+        "p50_ms": 97.83,
+        "p90_ms": 122.62,
+        "min_ms": 85.65,
+        "max_ms": 180.05,
+        "n": 30
+      },
+      "kahshe_e2e": "full-scan (structural, not timed)",
+      "opensearch": {
+        "p50_ms": 2803.84,
+        "p90_ms": 2934.26,
+        "min_ms": 2557.38,
+        "max_ms": 3178.4,
+        "n": 30,
+        "took_p50_ms": 2794.0
+      },
+      "files_kept": 10000,
+      "response_bytes": 3160096,
+      "kahshe_rows": null,
+      "os_count": 6251869,
+      "gate_ok": true
+    },
+    "id_range_8files": {
+      "kahshe_plan": {
+        "p50_ms": 17.02,
+        "p90_ms": 18.74,
+        "min_ms": 13.82,
+        "max_ms": 21.8,
+        "n": 30
+      },
+      "kahshe_e2e": {
+        "p50_ms": 223.53,
+        "p90_ms": 254.62,
+        "min_ms": 200.21,
+        "max_ms": 268.09,
+        "n": 30
+      },
+      "opensearch": {
+        "p50_ms": 12.14,
+        "p90_ms": 13.01,
+        "min_ms": 8.42,
+        "max_ms": 13.92,
+        "n": 30,
+        "took_p50_ms": 4.0
+      },
+      "files_kept": 8,
+      "response_bytes": 2624,
+      "kahshe_rows": 40000,
+      "os_count": 40000,
+      "gate_ok": true
+    },
+    "composed_range_needle": {
+      "kahshe_plan": {
+        "p50_ms": 18.78,
+        "p90_ms": 21.11,
+        "min_ms": 14.39,
+        "max_ms": 21.77,
+        "n": 30
+      },
+      "kahshe_e2e": {
+        "p50_ms": 95.78,
+        "p90_ms": 104.73,
+        "min_ms": 86.39,
+        "max_ms": 114.88,
+        "n": 30
+      },
+      "opensearch": {
+        "p50_ms": 18.49,
+        "p90_ms": 19.36,
+        "min_ms": 12.01,
+        "max_ms": 40.3,
+        "n": 30,
+        "took_p50_ms": 10.0
+      },
+      "files_kept": 1,
+      "response_bytes": 412,
+      "kahshe_rows": 1,
+      "os_count": 1,
+      "gate_ok": true
+    }
+  }
+}

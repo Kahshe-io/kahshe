@@ -1,0 +1,115 @@
+package io.kahshe.format.type.bloom;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.Table;
+import io.kahshe.format.IndexPruner;
+import io.kahshe.format.type.IndexType;
+import io.kahshe.format.type.gram.GramIndex;
+
+/**
+ * The n-gram bloom tier behind {@link IndexType}: {@link BloomLeaf} writes it, {@link IndexStore}
+ * reads it, {@link NgramBloom} answers it.
+ *
+ * <p>It holds the gram reader as well as its own, because the gram layer is exact over the files it
+ * covers and those files are never probed against a bloom — the two tiers answer one loop between
+ * them.
+ */
+public final class BloomIndexType implements IndexType {
+
+  /**
+   * This type's identity in the registry — unique across it, and what
+   * {@link io.kahshe.format.type.IndexTypes#COST_ORDER} ranks. Unlike the other two tiers it names
+   * nothing on disk: this tier's directory is {@link IndexMeta#dir} and its leaves are listed by
+   * name inside its own metadata document.
+   */
+  public static final String KEY = "bloom";
+
+  /** The blooms and the gram answers a covered file is decided by instead. */
+  record Blooms(IndexStore store, GramIndex grams) implements Loaded {}
+
+  @Override
+  public String key() {
+    return KEY;
+  }
+
+  /** Nothing: a file's bloom is built from its raw text inside the read, not row by row. */
+  @Override
+  public Collector collector(BuildContext ctx) {
+    return Collector.NONE;
+  }
+
+  @Override
+  public Leaves write(PublishContext ctx) throws IOException {
+    long bytes =
+        BloomLeaf.write(
+            ctx.table(), ctx.indexIo(), ctx.indexRoot(), ctx.column(), ctx.fieldId(),
+            ctx.snapshotId(), ctx.blooms(), ctx.incremental() ? ctx.priorBloomMeta() : null,
+            ctx.priorBloomUuid(), ctx.bloomFpp(), ctx.gramRule());
+    // the leaf list lives in this tier's own IndexMeta, which BloomLeaf.write has just published
+    return new Leaves(List.of(), bytes, List.of());
+  }
+
+  @Override
+  public Loaded load(ReadContext ctx) {
+    return ctx.blooms() == null ? null : new Blooms(ctx.blooms(), ctx.grams());
+  }
+
+  @Override
+  public List<FileScanTask> prune(Loaded loaded, Probe probe, List<FileScanTask> tasks) {
+    List<IndexPruner.Candidate> candidates = probe.candidates();
+    if (candidates.isEmpty()) {
+      return tasks;
+    }
+    Blooms blooms = (Blooms) loaded;
+    IndexPruner.GramProbe[] gramProbes =
+        probe.gramProbes().resolve(blooms.grams(), probe.table(), candidates);
+    List<FileScanTask> kept = new ArrayList<>(tasks.size());
+    for (FileScanTask task : tasks) {
+      if (mightMatch(blooms.store(), probe.table(), task, candidates, gramProbes)) {
+        kept.add(task);
+      }
+    }
+    return kept;
+  }
+
+  private static boolean mightMatch(
+      IndexStore store, Table table, FileScanTask task, List<IndexPruner.Candidate> candidates,
+      IndexPruner.GramProbe[] gramProbes) {
+    String path = task.file().location();
+    for (int i = 0; i < candidates.size(); i++) {
+      IndexPruner.Candidate candidate = candidates.get(i);
+      IndexPruner.GramProbe gramProbe = gramProbes[i];
+      if (gramProbe != null) {
+        Integer ordinal = gramProbe.loaded().ordinalOf().get(path);
+        if (ordinal != null && ordinal >= gramProbe.loaded().fromOrdinal()) {
+          // the gram layer is exact over its covered files, so its answer is final for this
+          // candidate: a bloom could only re-approve what it already kept
+          continue;
+        }
+      }
+      IndexStore.LoadedIndex index = store.forColumn(table, candidate.column());
+      if (index == null) {
+        continue;
+      }
+      NgramBloom bloom = index.blooms().get(path);
+      if (bloom == null) {
+        continue; // unindexed file: never prune
+      }
+      // conjunctive candidate: for IN, any literal may match; all-absent proves the file out
+      boolean any = false;
+      for (String literal : candidate.literals()) {
+        if (bloom.mightContain(literal, candidate.mode())) {
+          any = true;
+          break;
+        }
+      }
+      if (!any) {
+        return false;
+      }
+    }
+    return true;
+  }
+}

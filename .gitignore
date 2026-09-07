@@ -1,0 +1,18 @@
+*.log
+.DS_Store
+.gradle/
+.ref/
+.claude/
+.venv/
+benchmark/corpus/
+/build/
+*/build/
+dev/testenv/data/
+dev/trino-patch/io.trino_trino-iceberg-*.jar
+__pycache__/
+
+# pySigma backend: a local venv and pytest's caches
+sigma/.venv/
+sigma/**/__pycache__/
+sigma/.pytest_cache/
+sigma/*.egg-info/

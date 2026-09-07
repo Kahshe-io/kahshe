@@ -1,0 +1,2 @@
+# Test-classpath only: the family AnalyzerFamiliesTest expects the service loader to find.
+io.kahshe.analysis.analyzer.TestOnlyAnalyzerFamily

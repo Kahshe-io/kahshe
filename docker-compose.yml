@@ -1,0 +1,66 @@
+# Quickstart stack: Apache Polaris (backing catalog) + kahshe in front of it.
+#
+#   docker compose up -d --build      # catalog + proxy
+#   docker compose run --rm seed      # create + index + verify a demo table
+#
+# Ephemeral by design: Polaris runs its in-memory metastore, and the warehouse
+# lives in a named volume. `docker compose down -v` resets everything.
+services:
+  # The shared warehouse volume starts root-owned; open it up so every
+  # container (Polaris, kahshe, the seeder) can write its own files. Demo only.
+  warehouse-init:
+    image: busybox:1.37
+    command: chmod 0777 /warehouse
+    volumes:
+      - warehouse:/warehouse
+
+  polaris:
+    image: apache/polaris:1.7.0
+    depends_on:
+      warehouse-init:
+        condition: service_completed_successfully
+    environment:
+      POLARIS_BOOTSTRAP_CREDENTIALS: POLARIS,root,s3cr3t
+      polaris.features."ALLOW_INSECURE_STORAGE_TYPES": "true"
+      polaris.features."SUPPORTED_CATALOG_STORAGE_TYPES": '["FILE"]'
+      polaris.readiness.ignore-severe-issues: "true"
+    volumes:
+      - warehouse:/warehouse
+
+  kahshe:
+    build: .
+    depends_on:
+      warehouse-init:
+        condition: service_completed_successfully
+      polaris:
+        condition: service_started
+    # Demo only: run as root so index sidecars can be written into the shared
+    # volume next to files created by Polaris and the seeder. The image itself
+    # defaults to a dedicated non-root user (uid 10001).
+    user: "0"
+    ports:
+      - "8282:8282" # data plane (Iceberg REST)
+      - "8283:8283" # admin: /healthz /readyz /metrics
+    environment:
+      KAHSHE_BACKEND: http://polaris:8181/api/catalog
+      KAHSHE_CREDENTIAL: root:s3cr3t
+    volumes:
+      - warehouse:/warehouse
+
+  # One-shot: creates the Polaris catalog, seeds an indexed demo table through
+  # kahshe, and waits until index pruning is observable in plan results.
+  seed:
+    image: python:3.12-slim
+    profiles: [seed]
+    depends_on:
+      kahshe:
+        condition: service_started
+    command: sh -c "pip install --quiet 'pyiceberg[pyarrow]~=0.11.1' && python /quickstart/seed.py"
+    volumes:
+      - warehouse:/warehouse
+      - ./quickstart:/quickstart:ro
+      - pip-cache:/root/.cache/pip
+
+volumes:
+  warehouse:
+  pip-cache:

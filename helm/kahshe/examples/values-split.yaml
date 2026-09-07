@@ -1,0 +1,13 @@
+# The split shape: serving replicas that build nothing, and one watch instance that builds the
+# tables its rules name and delivers alerts. Every kahshe.index table needs a rule naming it.
+proxy:
+  replicas: 2
+  tableCacheTtlMs: 0       # required above one replica
+  indexer: false
+  podDisruptionBudget:
+    enabled: true
+watch:
+  enabled: true
+  indexer: true
+  # rules: |
+  #   (the content of examples/watch-rules.yaml)

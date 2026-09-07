@@ -1,0 +1,70 @@
+{
+  "format-version" : 1,
+  "report-type" : "kahshe-build",
+  "table-name" : {
+    "namespace" : [ ],
+    "name" : ""
+  },
+  "snapshot-id" : "SNAP",
+  "metrics" : {
+    "tokens" : {
+      "unit" : "count",
+      "value" : 10
+    },
+    "rows" : {
+      "unit" : "count",
+      "value" : 8
+    },
+    "terms" : {
+      "unit" : "count",
+      "value" : 6
+    },
+    "grams" : {
+      "unit" : "count",
+      "value" : 26
+    },
+    "gram-bytes" : {
+      "unit" : "bytes",
+      "value" : 910
+    },
+    "files-covered" : {
+      "unit" : "count",
+      "value" : 3
+    },
+    "files-added" : {
+      "unit" : "count",
+      "value" : 3
+    },
+    "files-departed" : {
+      "unit" : "count",
+      "value" : 0
+    },
+    "bloom-bytes" : {
+      "unit" : "bytes",
+      "value" : 108
+    },
+    "build" : {
+      "time-unit" : "milliseconds",
+      "count" : 1,
+      "total-duration" : 0
+    }
+  },
+  "metadata" : {
+    "build-id" : "BUILDID",
+    "prefix" : "",
+    "column" : "tags",
+    "field-id" : "2",
+    "kind" : "FULL",
+    "analyzer" : "kahshe-value-v1-max256",
+    "grams" : "kahshe-grams-v2-n3",
+    "started-ms" : "TIMESTAMP",
+    "published-ms" : "TIMESTAMP"
+  },
+  "files" : {
+    "added" : [ "TABLELOCATION/data/f1.parquet", "TABLELOCATION/data/f2.parquet", "TABLELOCATION/data/f3.parquet" ],
+    "departed" : [ ]
+  },
+  "leaves" : [ "INDEXROOT/term-v1-f2/aggregate-SNAP-r10-NONCE.parquet", "INDEXROOT/term-v1-f2/aggregate-SNAP-r11-NONCE.parquet", "INDEXROOT/term-v1-f2/aggregate-SNAP-r12-NONCE.parquet", "INDEXROOT/term-v1-f2/aggregate-SNAP-r27-NONCE.parquet", "INDEXROOT/term-v1-f2/aggregate-SNAP-r35-NONCE.parquet", "INDEXROOT/term-v1-f2/grams-SNAP-NONCE.parquet" ],
+  "warnings" : [ ],
+  "alerts" : [ ]
+}

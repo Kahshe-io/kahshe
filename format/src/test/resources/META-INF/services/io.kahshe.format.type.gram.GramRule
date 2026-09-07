@@ -1,0 +1,2 @@
+# Test-classpath only: the rule GramRulesTest expects the service loader to find.
+io.kahshe.format.type.gram.TestOnlyGramRule

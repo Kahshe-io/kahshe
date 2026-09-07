@@ -1,0 +1,25 @@
+{
+  "format-version" : 1,
+  "uuid" : "DOCUUID",
+  "table-uuid" : "TABLEUUID",
+  "location" : "INDEXROOT/ngram-bloom-f2",
+  "type" : "ngram-bloom",
+  "transform-function" : "HASH",
+  "key-column-ids" : [ 2 ],
+  "properties" : {
+    "column" : "tags",
+    "field-id" : "2",
+    "ngram" : "3",
+    "grams" : "kahshe-grams-v2-n3",
+    "fpp" : "0.01"
+  },
+  "snapshots" : [ {
+    "snapshot-id" : 1,
+    "source-table-snapshot-id" : "SNAP",
+    "timestamp-ms" : "TIMESTAMP",
+    "leaf-files" : [ "INDEXROOT/ngram-bloom-f2/leaf-SNAP-NONCE.parquet" ],
+    "files-covered" : 3,
+    "data-bytes" : 0,
+    "index-bytes" : 108
+  } ]
+}

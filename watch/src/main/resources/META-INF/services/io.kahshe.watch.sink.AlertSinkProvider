@@ -1,0 +1,5 @@
+# The built-in alert sinks. A sink outside this module joins by shipping its own copy of this
+# file; nothing here or in the app has to be edited for it to be discovered.
+io.kahshe.watch.sink.WebhookSink$Provider
+io.kahshe.watch.sink.LogSink$Provider
+io.kahshe.watch.sink.NoneSink$Provider

@@ -1,0 +1,223 @@
+{
+  "search": {
+    "timestamp": 1787837165.913263,
+    "queries": {
+      "quorum-epoch-777": {
+        "desc": "needle multi-token",
+        "kahshe": {
+          "p50_ms": 6.75,
+          "p90_ms": 8.27,
+          "min_ms": 5.29,
+          "max_ms": 13.47,
+          "n": 30,
+          "status": 200,
+          "coverage": {
+            "files_total": 53,
+            "files_indexed": 53,
+            "snapshot_id": 7193274011580675358,
+            "analyzer": "kahshe-ascii-v1",
+            "stale": false,
+            "deletes_present": false,
+            "exactness": "advisory",
+            "ranking_exhaustive": true,
+            "groups_opened": 1,
+            "segments_opened": 32
+          }
+        },
+        "os": {
+          "p50_ms": 6.13,
+          "p90_ms": 14.11,
+          "min_ms": 4.76,
+          "max_ms": 16.25,
+          "n": 30,
+          "took_p50_ms": 3.0,
+          "total": 99868
+        },
+        "sanity": {
+          "top_hit_verified": true,
+          "kahshe_total_like": 10,
+          "os_total": 99868
+        }
+      },
+      "connection": {
+        "desc": "common single token",
+        "kahshe": {
+          "p50_ms": 6.01,
+          "p90_ms": 7.23,
+          "min_ms": 5.44,
+          "max_ms": 11.86,
+          "n": 30,
+          "status": 200,
+          "coverage": {
+            "files_total": 53,
+            "files_indexed": 53,
+            "snapshot_id": 7193274011580675358,
+            "analyzer": "kahshe-ascii-v1",
+            "stale": false,
+            "deletes_present": false,
+            "exactness": "advisory",
+            "ranking_exhaustive": true,
+            "groups_opened": 1,
+            "segments_opened": 52
+          }
+        },
+        "os": {
+          "p50_ms": 3.24,
+          "p90_ms": 4.05,
+          "min_ms": 2.52,
+          "max_ms": 4.65,
+          "n": 30,
+          "took_p50_ms": 0.0,
+          "total": 319731
+        },
+        "sanity": {
+          "top_hit_verified": true,
+          "kahshe_total_like": 10,
+          "os_total": 319731
+        }
+      },
+      "checkpoint stall": {
+        "desc": "two tokens",
+        "kahshe": {
+          "p50_ms": 1.96,
+          "p90_ms": 2.25,
+          "min_ms": 1.69,
+          "max_ms": 2.31,
+          "n": 30,
+          "status": 200,
+          "coverage": {
+            "files_total": 53,
+            "files_indexed": 53,
+            "snapshot_id": 7193274011580675358,
+            "analyzer": "kahshe-ascii-v1",
+            "stale": false,
+            "deletes_present": false,
+            "exactness": "advisory",
+            "ranking_exhaustive": true,
+            "groups_opened": 1,
+            "segments_opened": 8
+          }
+        },
+        "os": {
+          "p50_ms": 2.89,
+          "p90_ms": 3.47,
+          "min_ms": 2.69,
+          "max_ms": 3.9,
+          "n": 30,
+          "took_p50_ms": 0.5,
+          "total": 10500
+        },
+        "sanity": {
+          "top_hit_verified": true,
+          "kahshe_total_like": 10,
+          "os_total": 10500
+        }
+      },
+      "timeout waiting quorum": {
+        "desc": "three tokens (may be absent; zero-result timing is valid)",
+        "kahshe": {
+          "p50_ms": 6.52,
+          "p90_ms": 7.68,
+          "min_ms": 5.56,
+          "max_ms": 7.85,
+          "n": 30,
+          "status": 200,
+          "coverage": {
+            "files_total": 53,
+            "files_indexed": 53,
+            "snapshot_id": 7193274011580675358,
+            "analyzer": "kahshe-ascii-v1",
+            "stale": false,
+            "deletes_present": false,
+            "exactness": "advisory",
+            "ranking_exhaustive": true,
+            "groups_opened": 1,
+            "segments_opened": 52
+          }
+        },
+        "os": {
+          "p50_ms": 4.91,
+          "p90_ms": 6.62,
+          "min_ms": 3.83,
+          "max_ms": 9.06,
+          "n": 30,
+          "took_p50_ms": 2.0,
+          "total": 99828
+        },
+        "sanity": {
+          "top_hit_verified": true,
+          "kahshe_total_like": 10,
+          "os_total": 99828
+        }
+      }
+    }
+  },
+  "count": {
+    "timestamp": 1787795689.604665,
+    "terms": {
+      "connection": {
+        "kahshe": {
+          "p50_ms": 0.96,
+          "p90_ms": 1.64,
+          "min_ms": 0.7,
+          "max_ms": 3.19,
+          "n": 30,
+          "status": 200,
+          "count": 319731
+        },
+        "os": {
+          "p50_ms": 1.63,
+          "p90_ms": 1.92,
+          "min_ms": 1.39,
+          "max_ms": 2.24,
+          "n": 30,
+          "took_p50_ms": 0.0,
+          "count": 319731
+        },
+        "counts_equal": true
+      },
+      "quorum": {
+        "kahshe": {
+          "p50_ms": 0.76,
+          "p90_ms": 0.87,
+          "min_ms": 0.61,
+          "max_ms": 1.02,
+          "n": 30,
+          "status": 200,
+          "count": 19936
+        },
+        "os": {
+          "p50_ms": 1.59,
+          "p90_ms": 1.74,
+          "min_ms": 1.32,
+          "max_ms": 3.06,
+          "n": 30,
+          "took_p50_ms": 0.0,
+          "count": 19936
+        },
+        "counts_equal": true
+      },
+      "zzzabsent": {
+        "kahshe": {
+          "p50_ms": 0.73,
+          "p90_ms": 0.85,
+          "min_ms": 0.64,
+          "max_ms": 1.04,
+          "n": 30,
+          "status": 200,
+          "count": 0
+        },
+        "os": {
+          "p50_ms": 1.55,
+          "p90_ms": 1.73,
+          "min_ms": 1.33,
+          "max_ms": 2.01,
+          "n": 30,
+          "took_p50_ms": 0.0,
+          "count": 0
+        },
+        "counts_equal": true
+      }
+    }
+  }
+}

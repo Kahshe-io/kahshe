@@ -1,0 +1,4 @@
+# The analyzer families kahshe ships. Analyzers registers these two first and by identity, so
+# this file is how another classpath (a jar, a module path) finds them, not how kahshe does.
+io.kahshe.analysis.analyzer.AsciiAnalyzerFamily
+io.kahshe.analysis.analyzer.ValueAnalyzerFamily

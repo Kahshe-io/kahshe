@@ -1,0 +1,12 @@
+apiVersion: v2
+name: kahshe
+description: Index-aware Iceberg REST planning proxy, with its indexer and watcher
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords: [iceberg, rest-catalog, lakehouse, index, planning]
+# Resolves once the repository is published; Artifact Hub and `helm show chart` use both.
+home: https://github.com/Kahshe-io/kahshe
+icon: https://raw.githubusercontent.com/Kahshe-io/kahshe/main/docs/brand/icon-512.png
+sources:
+  - https://github.com/Kahshe-io/kahshe

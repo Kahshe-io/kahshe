@@ -1,0 +1,15 @@
+rules:
+  - id: 00000000-0000-4000-8000-000000000001
+    title: Test rule
+    severity: high
+    prefix: lakehouse
+    table: logs.httplogs
+    detection:
+      sel0:
+        - { column: request, starts_with: [/admin] }
+        - { column: request, ends_with: [.php] }
+        - { column: status, gte: [400] }
+        - { column: status, lt: [500] }
+      sel1:
+        - { column: request, re: ["^/api/v[0-9]+/"] }
+      condition: sel0 or sel1

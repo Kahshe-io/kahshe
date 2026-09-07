@@ -1,0 +1,50 @@
+{
+  "format-version" : 1,
+  "uuid" : "DOCUUID",
+  "table-uuid" : "TABLEUUID",
+  "location" : "INDEXROOT/term-v1-f1",
+  "type" : "term-dictionary",
+  "transform-function" : "IDENTITY",
+  "key-column-ids" : [ 1 ],
+  "properties" : {
+    "analyzer" : "kahshe-ascii-v3-max256",
+    "grams" : "kahshe-grams-v2-n3",
+    "counts-exact" : "true",
+    "kahshe.format-version" : "2",
+    "column" : "msg",
+    "field-id" : "1"
+  },
+  "snapshots" : [ {
+    "snapshot-id" : 1,
+    "source-table-snapshot-id" : "SNAP",
+    "timestamp-ms" : "TIMESTAMP",
+    "files" : [ {
+      "path" : "TABLELOCATION/data/f1.parquet",
+      "ordinal" : 0,
+      "live" : true
+    }, {
+      "path" : "TABLELOCATION/data/f2.parquet",
+      "ordinal" : 1,
+      "live" : true
+    }, {
+      "path" : "TABLELOCATION/data/f3.parquet",
+      "ordinal" : 2,
+      "live" : true
+    } ],
+    "totals" : {
+      "tokens" : 30,
+      "rows" : 10,
+      "terms" : 25
+    },
+    "terms-per-range" : [ 1, 4, 1, 0, 0, 0, 0, 0, 0, 0, 3, 2, 1, 0, 0, 1, 1, 2, 1, 0, 1, 1, 0, 0, 1, 0, 2, 0, 0, 2, 0, 0, 1, 0, 0, 0 ],
+    "gram-coverage" : {
+      "from-ordinal" : 0,
+      "grams" : 107,
+      "bytes" : 1162
+    },
+    "leaves" : {
+      "aggregate" : [ "INDEXROOT/term-v1-f1/aggregate-SNAP-r00-NONCE.parquet", "INDEXROOT/term-v1-f1/aggregate-SNAP-r01-NONCE.parquet", "INDEXROOT/term-v1-f1/aggregate-SNAP-r02-NONCE.parquet", "", "", "", "", "", "", "", "INDEXROOT/term-v1-f1/aggregate-SNAP-r10-NONCE.parquet", "INDEXROOT/term-v1-f1/aggregate-SNAP-r11-NONCE.parquet", "INDEXROOT/term-v1-f1/aggregate-SNAP-r12-NONCE.parquet", "", "", "INDEXROOT/term-v1-f1/aggregate-SNAP-r15-NONCE.parquet", "INDEXROOT/term-v1-f1/aggregate-SNAP-r16-NONCE.parquet", "INDEXROOT/term-v1-f1/aggregate-SNAP-r17-NONCE.parquet", "INDEXROOT/term-v1-f1/aggregate-SNAP-r18-NONCE.parquet", "", "INDEXROOT/term-v1-f1/aggregate-SNAP-r20-NONCE.parquet", "INDEXROOT/term-v1-f1/aggregate-SNAP-r21-NONCE.parquet", "", "", "INDEXROOT/term-v1-f1/aggregate-SNAP-r24-NONCE.parquet", "", "INDEXROOT/term-v1-f1/aggregate-SNAP-r26-NONCE.parquet", "", "", "INDEXROOT/term-v1-f1/aggregate-SNAP-r29-NONCE.parquet", "", "", "INDEXROOT/term-v1-f1/aggregate-SNAP-r32-NONCE.parquet", "", "", "" ],
+      "grams" : "INDEXROOT/term-v1-f1/grams-SNAP-NONCE.parquet"
+    }
+  } ]
+}

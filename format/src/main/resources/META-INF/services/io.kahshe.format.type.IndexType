@@ -1,0 +1,3 @@
+io.kahshe.format.type.bloom.BloomIndexType
+io.kahshe.format.type.gram.GramIndexType
+io.kahshe.format.type.term.TermIndexType

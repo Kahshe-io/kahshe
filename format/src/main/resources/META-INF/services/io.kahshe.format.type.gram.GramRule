@@ -1,0 +1,4 @@
+# The gram rules kahshe ships. GramRules registers these two first and by identity, so this file
+# is how another classpath (a jar, a module path) finds them, not how kahshe does.
+io.kahshe.format.type.gram.Utf16GramRule
+io.kahshe.format.type.gram.CodePointGramRule

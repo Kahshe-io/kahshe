@@ -1,0 +1,41 @@
+{{- if .Values.proxy.autoscaling.enabled }}
+{{- if ne (int .Values.proxy.tableCacheTtlMs) 0 }}
+{{- fail "proxy.autoscaling.enabled requires proxy.tableCacheTtlMs: 0.\n\nEvery cache is per process, and so is the record of which snapshot a replica last forwarded for a table. With more than one replica at a non-zero TTL, a client can loadTable through one replica and plan through another, and the plan is answered from a view up to the TTL old — it silently LACKS the files committed since. Pruning stays correct; the file list is what goes stale, which is the failure direction this project refuses.\n\nAn autoscaler makes that worse than a deliberate scale-out does, because it happens when nobody is watching. Set proxy.tableCacheTtlMs to 0, which costs one metadata read per plan and lets the serving role scale freely." }}
+{{- end }}
+{{- if and .Values.proxy.indexer (not .Values.indexer.enabled) }}
+{{- fail "proxy.autoscaling.enabled with proxy.indexer: true and no indexer fleet.\n\nEvery replica would drain the build queue. A build lease stops them corrupting an index, but it does not make the second builder useful — it wastes a pod's CPU and its scratch volume on work another replica already holds the lease for. Either set proxy.indexer: false and let a dedicated indexer or watch Deployment build, or enable the fleet so members claim columns by lease instead of racing for them." }}
+{{- end }}
+# Scaling the serving role. Safe only with tableCacheTtlMs 0, which the guards above require:
+# a replica that caches nothing cannot hold a stale view, and every plan is answered complete
+# inline.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "kahshe.fullname" . }}
+  labels:
+    {{- include "kahshe.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "kahshe.fullname" . }}
+  minReplicas: {{ .Values.proxy.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.proxy.autoscaling.maxReplicas }}
+  metrics:
+    {{- with .Values.proxy.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: {{ . }} }
+    {{- end }}
+    {{- with .Values.proxy.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target: { type: Utilization, averageUtilization: {{ . }} }
+    {{- end }}
+  {{- with .Values.proxy.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

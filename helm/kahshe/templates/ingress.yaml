@@ -1,0 +1,48 @@
+{{- if .Values.ingress.enabled }}
+# An Ingress for engines outside the cluster. Three arrangements are possible and they are not
+# interchangeable — pick one and set the annotations your controller needs:
+#
+#   1. Terminate at the ingress. Leave tls.enabled false. Simplest, and the hop from the ingress
+#      to the pod is then plaintext inside the cluster.
+#   2. Re-encrypt. tls.enabled true, and tell the controller the backend speaks HTTPS
+#      (nginx: nginx.ingress.kubernetes.io/backend-protocol: HTTPS).
+#   3. Passthrough. tls.enabled true and the controller hands the connection through untouched
+#      (nginx: nginx.ingress.kubernetes.io/ssl-passthrough: "true"). The only one that gives the
+#      engine kahshe's own certificate, and so the only one that can do mutual TLS end to end.
+#
+# The chart cannot choose for you, because the right answer depends on what your controller is
+# and what your security review asked for.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "kahshe.fullname" . }}
+  labels:
+    {{- include "kahshe.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ include "kahshe.fullname" $ }}
+                port:
+                  number: {{ $.Values.service.dataPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}

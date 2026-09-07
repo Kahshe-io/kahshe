@@ -1,0 +1,112 @@
+{{- if and (gt (int .Values.proxy.replicas) 1) (ne (int .Values.proxy.tableCacheTtlMs) 0) }}
+{{- fail "proxy.replicas > 1 requires proxy.tableCacheTtlMs: 0.\n\nEvery cache is per process, and so is the record of which snapshot a replica last forwarded for a table. With more than one replica at a non-zero TTL, a client can loadTable through one replica and plan through another, and that plan is answered from a view up to the TTL old — it silently LACKS the files committed since. Pruning stays correct; the FILE LIST is what goes stale, which is the one failure direction this project does not accept.\n\nSet proxy.tableCacheTtlMs to 0. It costs one metadata read per plan and lets the serving role scale freely." }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kahshe.fullname" . }}
+  labels:
+    {{- include "kahshe.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy
+spec:
+  replicas: {{ .Values.proxy.replicas }}
+  selector:
+    matchLabels:
+      {{- include "kahshe.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: proxy
+  template:
+    metadata:
+      labels:
+        {{- include "kahshe.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: proxy
+      annotations:
+        {{- include "kahshe.metricsAnnotations" . | nindent 8 }}
+        {{- with .Values.proxy.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "kahshe.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false   # a Service named kahshe would inject KAHSHE_PORT=tcp://...
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: kahshe
+          image: {{ include "kahshe.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - { containerPort: {{ .Values.service.dataPort }}, name: data }
+            - { containerPort: {{ .Values.service.adminPort }}, name: admin }
+          env:
+            - name: KAHSHE_MODE
+              value: {{ ternary "proxy" "both" .Values.watch.enabled | quote }}
+            - name: KAHSHE_PORT
+              value: {{ .Values.service.dataPort | quote }}
+            - name: KAHSHE_ADMIN_PORT
+              value: {{ .Values.service.adminPort | quote }}
+            {{- include "kahshe.backendEnv" . | nindent 12 }}
+{{- if .Values.tls.enabled }}
+            {{- include "kahshe.tlsEnv" . | nindent 12 }}
+{{- end }}
+            - name: KAHSHE_TABLE_CACHE_TTL_MS
+              value: {{ .Values.proxy.tableCacheTtlMs | quote }}
+            - name: KAHSHE_INDEXER
+              value: {{ .Values.proxy.indexer | quote }}
+            {{- include "kahshe.buildEnv" .Values.proxy.build | nindent 12 }}
+            {{- include "kahshe.extraEnv" .Values.proxy.env | nindent 12 }}
+            {{- with .Values.proxy.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "5"] }   # cover endpoint-removal propagation
+          startupProbe:
+            httpGet: { path: /healthz, port: admin, scheme: {{ include "kahshe.probeScheme" . }} }
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet: { path: /readyz, port: admin, scheme: {{ include "kahshe.probeScheme" . }} }
+            periodSeconds: 10
+            timeoutSeconds: 4
+          livenessProbe:
+            httpGet: { path: /healthz, port: admin, scheme: {{ include "kahshe.probeScheme" . }} }
+            periodSeconds: 30
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.proxy.resources | nindent 12 }}
+          volumeMounts:
+{{- if .Values.tls.enabled }}
+            {{- include "kahshe.tlsMounts" . | nindent 12 }}
+{{- end }}
+            # java.io.tmpdir: the S3 client stages every upload here; the root filesystem is read-only
+            - { name: tmp, mountPath: /tmp }
+            # Every build writes sorted runs here and the root filesystem is read-only, so this
+            # mount is required whenever this replica builds (proxy.indexer true).
+            - { name: term-build, mountPath: /tmp/kahshe-term-build }
+      volumes:
+{{- if .Values.tls.enabled }}
+        {{- include "kahshe.tlsVolumes" . | nindent 8 }}
+{{- end }}
+        - name: tmp
+          emptyDir: { sizeLimit: {{ .Values.tmpSizeLimit }} }
+        - name: term-build
+          emptyDir: { sizeLimit: {{ .Values.proxy.build.scratchSizeLimit }} }
+      {{- with .Values.proxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

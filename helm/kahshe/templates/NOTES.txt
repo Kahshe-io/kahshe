@@ -1,0 +1,36 @@
+kahshe {{ .Chart.AppVersion }} is installed as release {{ .Release.Name }}.
+
+Point engines' Iceberg REST catalog URI at:
+  http{{ if .Values.tls.enabled }}s{{ end }}://{{ include "kahshe.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.dataPort }}
+Metrics and health are on port {{ .Values.service.adminPort }} (/metrics, /healthz, /readyz).
+
+Secrets this release reads and does not create:
+{{- if .Values.backend.credentialSecret }}
+  {{ .Values.backend.credentialSecret }}   key {{ .Values.backend.credentialKey }}: the backend credential
+{{- end }}
+{{- if and .Values.watch.enabled (eq (.Values.watch.sink | default "webhook") "webhook") }}
+  {{ .Values.watch.webhookSecret }}   keys url, auth (optional): the alert webhook
+{{- end }}
+{{- if .Values.tls.enabled }}
+{{- /* Under certManager.enabled the chart's Certificate has cert-manager write this one, so it
+       is not a Secret the operator has to create. */}}
+{{- if not .Values.tls.certManager.enabled }}
+  {{ .Values.tls.secretName }}   keys tls.crt, tls.key: the certificate the pods serve
+{{- end }}
+{{- if ne .Values.tls.clientAuth "none" }}
+  {{ .Values.tls.clientCaSecret }}   key ca.crt: the CA that signed the client certificates you accept
+{{- end }}
+{{- end }}
+{{- if .Values.indexer.enabled }}
+
+Indexer fleet: {{ .Values.indexer.replicas }} builder(s) sharing the columns of the tables the
+rules name, by build lease. They deliver no alerts (sink `none`) and run no row scan, so pair
+them with a watch instance (watch.enabled, watch.indexer: false) that scans, alerts, and
+delivers from their build reports. Watch kahshe_index_lease_skips_total and
+kahshe_index_max_behind_seconds: a fleet that never skips may be too small.
+{{- if not .Values.watch.enabled }}
+
+NOTE: indexer.enabled without watch.enabled means nothing in this release delivers alerts.
+The builders still write build reports; something has to read them.
+{{- end }}
+{{- end }}

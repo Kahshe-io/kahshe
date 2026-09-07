@@ -1,0 +1,14 @@
+rules:
+  - id: 00000000-0000-4000-8000-000000000013
+    title: More than four
+    severity: medium
+    prefix: lakehouse
+    table: logs.httplogs
+    detection:
+      sel0:
+        - { column: status, equals: [404] }
+      condition: sel0
+    window:
+      ts_column: ts
+      timeframe: 300s
+      count: 5

@@ -1,0 +1,25 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kahshe.fullname" . }}
+  labels:
+    {{- include "kahshe.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "kahshe.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: proxy
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.engineNamespaceSelector | nindent 12 }}
+      ports:
+        - { port: {{ .Values.service.dataPort }} }
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.monitoringNamespaceSelector | nindent 12 }}
+      ports:
+        - { port: {{ .Values.service.adminPort }} }
+{{- end }}

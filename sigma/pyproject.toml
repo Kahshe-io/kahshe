@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pysigma-backend-kahshe"
+version = "0.1.0"
+description = "pySigma backend that compiles Sigma rules into kahshe watch rules"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = ["pysigma>=1.0,<2.0"]
+
+[project.urls]
+Homepage = "https://github.com/Kahshe-io/kahshe"
+
+[tool.setuptools.packages.find]
+include = ["sigma*"]
+
+[dependency-groups]
+dev = ["pytest>=7"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

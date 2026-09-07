@@ -1,0 +1,50 @@
+{
+  "format-version" : 1,
+  "uuid" : "DOCUUID",
+  "table-uuid" : "TABLEUUID",
+  "location" : "INDEXROOT/term-v1-f2",
+  "type" : "term-dictionary",
+  "transform-function" : "IDENTITY",
+  "key-column-ids" : [ 2 ],
+  "properties" : {
+    "analyzer" : "kahshe-value-v1-max256",
+    "grams" : "kahshe-grams-v2-n3",
+    "counts-exact" : "true",
+    "kahshe.format-version" : "2",
+    "column" : "tags",
+    "field-id" : "2"
+  },
+  "snapshots" : [ {
+    "snapshot-id" : 1,
+    "source-table-snapshot-id" : "SNAP",
+    "timestamp-ms" : "TIMESTAMP",
+    "files" : [ {
+      "path" : "TABLELOCATION/data/f1.parquet",
+      "ordinal" : 0,
+      "live" : true
+    }, {
+      "path" : "TABLELOCATION/data/f2.parquet",
+      "ordinal" : 1,
+      "live" : true
+    }, {
+      "path" : "TABLELOCATION/data/f3.parquet",
+      "ordinal" : 2,
+      "live" : true
+    } ],
+    "totals" : {
+      "tokens" : 10,
+      "rows" : 8,
+      "terms" : 6
+    },
+    "terms-per-range" : [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1 ],
+    "gram-coverage" : {
+      "from-ordinal" : 0,
+      "grams" : 26,
+      "bytes" : 910
+    },
+    "leaves" : {
+      "aggregate" : [ "", "", "", "", "", "", "", "", "", "", "INDEXROOT/term-v1-f2/aggregate-SNAP-r10-NONCE.parquet", "INDEXROOT/term-v1-f2/aggregate-SNAP-r11-NONCE.parquet", "INDEXROOT/term-v1-f2/aggregate-SNAP-r12-NONCE.parquet", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "INDEXROOT/term-v1-f2/aggregate-SNAP-r27-NONCE.parquet", "", "", "", "", "", "", "", "INDEXROOT/term-v1-f2/aggregate-SNAP-r35-NONCE.parquet" ],
+      "grams" : "INDEXROOT/term-v1-f2/grams-SNAP-NONCE.parquet"
+    }
+  } ]
+}

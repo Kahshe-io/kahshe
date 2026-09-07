@@ -1,0 +1,279 @@
+# kahshe: point engines' catalog URI at the Service this chart creates instead of the backing
+# catalog. One image, roles by configuration: the proxy Deployment always; a watch Deployment when
+# watch.enabled. The comments here are the operator-facing reference; the repository README
+# and docs/ARCHITECTURE.md carry the rest.
+
+image:
+  repository: kahshe
+  tag: ""            # empty: the chart's appVersion
+  digest: ""         # set to pin: repository@sha256:...; overrides tag
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+backend:
+  url: "http://nessie:19120/iceberg"   # or Polaris: http://polaris:8181/api/catalog
+  # KAHSHE_CREDENTIAL comes from a Secret you create; it never lives in values. Empty for a
+  # backend that takes no credential.
+  credentialSecret: kahshe-backend-credential
+  credentialKey: credential
+  scope: "PRINCIPAL_ROLE:ALL"
+
+# A ServiceAccount of kahshe's own. It asks the API server for nothing, so this exists purely to
+# be annotated: IRSA on EKS (eks.amazonaws.com/role-arn) and Workload Identity on GKE both bind a
+# cloud role to a service account. Without one, the only way to reach an S3 index root is a static
+# access key in a Secret.
+serviceAccount:
+  create: true
+  name: ""
+  automount: false
+  annotations: {}
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/kahshe-index
+
+# TLS on the data plane. Off by default because the chart cannot invent a certificate, and a
+# cluster that terminates TLS at an ingress or a mesh does not need kahshe to do it. Turn it on
+# where the hop from engine to kahshe must itself be encrypted — port 8282 otherwise carries
+# bearer tokens in the clear.
+#
+# The secret is the one cert-manager already writes: keys tls.crt and tls.key. kahshe re-reads
+# them while it runs, so a renewal takes effect without a restart or a pod recreation.
+tls:
+  enabled: false
+  # A Secret of type kubernetes.io/tls, or any Secret with tls.crt and tls.key.
+  secretName: kahshe-tls
+  # Mutual TLS: none | want | need. Anything but none needs clientCaSecret, whose ca.crt must
+  # have signed the client certificates you intend to accept.
+  clientAuth: none
+  clientCaSecret: ""
+  # Serve the admin port (metrics, health) over TLS too. Off because a collector scraping inside
+  # the pod usually wants plaintext, and probes would need their scheme changed with it.
+  admin: false
+  # How often the certificate files are re-checked for a rotation.
+  reloadMs: 60000
+  # Let cert-manager issue and renew the certificate, rather than pointing secretName at one you
+  # created. The Secret it writes is the one the pods mount, and because kahshe re-reads its
+  # certificate while running, a renewal needs no restart and no rollout.
+  certManager:
+    enabled: false
+    # Required when enabled. A ClusterIssuer is the common case.
+    issuerRef:
+      name: ""
+      kind: ClusterIssuer
+      group: cert-manager.io
+    # Defaults to the in-cluster Service names, which is what an engine connects to.
+    dnsNames: []
+    ipAddresses: []
+    duration: 2160h    # 90 days
+    renewBefore: 360h  # 15 days
+    keyAlgorithm: RSA
+    keySize: 2048
+
+proxy:
+  # TO SCALE OUT: set tableCacheTtlMs to 0 FIRST. Every cache is per process, and so is the record
+  # of which snapshot a replica last forwarded for a table. With two replicas at a non-zero TTL a
+  # client can loadTable through one and plan through the other, which answers from a view up to
+  # the TTL old: the plan silently lacks the files committed since. Pruning stays correct (an
+  # unindexed file is never pruned), the FILE LIST is what goes stale. A replica that caches
+  # nothing cannot hold a stale view, and every plan is answered complete inline, so with the TTL
+  # at 0 the serving role scales freely. It costs one metadata read per plan.
+  replicas: 1
+  tableCacheTtlMs: 10000
+  # KAHSHE_INDEXER on the proxy replicas. Keep ONE indexer among the pods that are NOT fleet
+  # members: two of those double-build (a build lease keeps them from corrupting an index; it
+  # does not make the second useful). In the split shape set this false and let the watch
+  # Deployment build; to scale building out, use the indexer fleet below, whose members skip
+  # each other's columns by lease instead of racing them.
+  indexer: true
+  # The build's memory ARITHMETIC, not tuning. The limit below is 2Gi and the image runs the JVM
+  # at 75% of it, so the heap is ~1.5 GiB. Caches take 40% (~614 MiB); the term arenas are
+  # indexThreads x termBufferBytes, allocated up front; gramBuildMaxBytes is a ceiling. These
+  # values fit (~998 MiB). BuildBudget refuses a build at startup, naming both numbers, if they
+  # are edited back into contradiction with the limit.
+  build:
+    indexThreads: 4
+    termBufferBytes: 33554432          # 32 MiB x 4 threads = 128 MiB
+    gramBuildMaxBytes: 268435456       # 256 MiB
+    # Local scratch for sorted runs. The cap is what the build refuses to exceed; the emptyDir is
+    # sized ABOVE it because a run is counted as it closes, so the one being written can cross
+    # the cap first, and an emptyDir sized exactly at the cap gets the pod evicted instead of the
+    # build failing gracefully. Raise both together, keeping the volume larger.
+    termBuildMaxSpillBytes: 12884901888   # 12 GiB
+    scratchSizeLimit: 16Gi
+  # Extra KAHSHE_* settings by name, for example KAHSHE_PLAN_STATS: requested.
+  # An index root on a store other than S3 is configured here too: KAHSHE_INDEX_IO_IMPL names the
+  # Iceberg FileIO class and KAHSHE_INDEX_IO_PROPERTIES its dotted properties, comma separated
+  # (s3.endpoint=...,s3.path-style-access=true). Credentials still belong in extraEnv below.
+  env: {}
+  # Raw env entries for values that come from Secrets, for example an external index root's
+  # KAHSHE_INDEX_S3_ACCESS_KEY with a secretKeyRef.
+  extraEnv: []
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 2Gi }
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+  # Scaling the serving role. REQUIRES tableCacheTtlMs 0 — the chart refuses to render otherwise,
+  # because a replica holding a cached table can answer a plan from a view older than the commit
+  # a client just made through another replica, and the plan then silently lacks files. That is
+  # the one failure direction this project does not accept, and an autoscaler reaches it when
+  # nobody is watching. It also refuses when this replica builds indexes and no fleet is
+  # configured, since every new pod would then drain the same build queue for nothing.
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+    behavior: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# An indexer FLEET: N replicas that share the columns of the tables the rules name. The unit of
+# scale is the COLUMN — each member takes a column's build lease and skips the ones another
+# member holds, counted on kahshe_index_lease_skips_total — so N members build N columns at once.
+# It does not shard one column: the biggest column's build time is still the floor, and
+# kahshe_index_max_behind_seconds is the signal that the fleet is too small.
+#
+# A member does not deliver alerts (sink `none`: it writes the build report and ONE watch
+# instance delivers from it, so dedup stays in one process) and does not run the row scan (the
+# scan is not lease-coordinated; N members would each read every new data file). Run it WITH a
+# watch instance that has watch.indexer: false — that pod scans, alerts, and delivers.
+indexer:
+  enabled: false
+  replicas: 2
+  # This member's claim order. Empty derives it from the pod name, which is what you want: N
+  # replicas then start on N different columns with nothing to configure. Set it only to pin one.
+  fleetOrdinal: ""
+  # Same arithmetic as proxy.build; the limit below is 4Gi, so the heap is ~3 GiB.
+  build:
+    indexThreads: 4
+    termBufferBytes: 67108864           # 64 MiB x 4 threads = 256 MiB
+    gramBuildMaxBytes: 536870912        # 512 MiB
+    termBuildMaxSpillBytes: 12884901888 # 12 GiB
+    scratchSizeLimit: 16Gi
+  # Extra KAHSHE_* settings by name, e.g. KAHSHE_INDEX_ROOT or KAHSHE_DATA_IO.
+  env: {}
+  # Raw env entries for values that come from Secrets, e.g. an index root's S3 credentials.
+  extraEnv: []
+  resources:
+    requests: { cpu: "1", memory: 2Gi }
+    limits: { memory: 4Gi }
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+watch:
+  # A dedicated watch instance: no data plane, rules and discovery active. ONLY tables named in
+  # rules are maintained by it (the catalog wrapper has no namespace listing), so in the split
+  # shape every kahshe.index table needs a rule naming it.
+  enabled: false
+  # Discovery and the row scan run either way. true: this instance also builds the indexes of the
+  # tables its rules name and alerts from the build. false: it builds nothing, and also reads each
+  # column's build-report.json, written by builds run elsewhere, delivering the alerts they raised
+  # once per build under the same (rule, file) suppression as its own scan.
+  indexer: true
+  # The rules file content (YAML; see examples/watch-rules.yaml). Mounted whole, not by subPath,
+  # so ConfigMap updates reach the file and its mtime-based hot reload.
+  rules: ""
+  # Or a ConfigMap you manage, holding the key watch-rules.yaml.
+  existingRulesConfigMap: ""
+  # Where alerts are delivered: "webhook" (default) POSTs each alert to the URL in webhookSecret;
+  # "log" writes one INFO line per alert with the payload JSON, for a dev stack with no receiver
+  # and no Secret. Any name a provider on the classpath claims; an unknown one fails startup.
+  sink: webhook
+  # The row scan: read the columns the rules name out of every newly added data file and
+  # evaluate every rule per ROW. This is what a rule spanning columns needs, and what lets a
+  # rule fire on a column kahshe.index does not name. false leaves only the index-riding path,
+  # which costs no data read but answers only single-column match/contains rules on indexed
+  # columns.
+  scan: true
+  # How many data files the scan reads at once; each thread holds one projected Parquet reader.
+  scanThreads: 4
+  # The webhook URL and its auth header carry alert content and credentials: a Secret with keys
+  # url and, optionally, auth.
+  webhookSecret: kahshe-watch-webhook
+  build:
+    indexThreads: 4
+    termBufferBytes: 33554432
+    gramBuildMaxBytes: 268435456
+    termBuildMaxSpillBytes: 12884901888
+    scratchSizeLimit: 16Gi
+  env: {}
+  extraEnv: []
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 2Gi }
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# An Ingress for engines OUTSIDE the cluster. In-cluster engines reach the Service directly and
+# need none of this. Three arrangements are possible and the chart cannot choose between them:
+# terminate at the ingress (leave tls.enabled false), re-encrypt (tls.enabled plus a
+# backend-protocol annotation), or passthrough (tls.enabled plus an ssl-passthrough annotation —
+# the only one that gives the engine kahshe's own certificate, and so the only one that can carry
+# mutual TLS end to end).
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    # nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+  hosts:
+    - host: kahshe.example.com
+      paths:
+        - { path: /, pathType: Prefix }
+  tls: []
+    # - { secretName: kahshe-ingress-tls, hosts: [kahshe.example.com] }
+
+service:
+  type: ClusterIP
+  dataPort: 8282
+  adminPort: 8283
+
+metrics:
+  # prometheus.io scrape annotations on the pods, admin port, /metrics
+  annotations: true
+  serviceMonitor:
+    # Prometheus Operator's own object, as an alternative to the annotations above. Off by
+    # default because the CRD may not be installed, and a chart that renders an unknown kind
+    # fails to apply.
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    # Labels your Prometheus selects ServiceMonitors by; release: kube-prometheus-stack is usual.
+    labels: {}
+    # Only used when the admin port itself serves TLS (tls.admin).
+    tlsConfig:
+      insecureSkipVerify: false
+
+networkPolicy:
+  # Restricts who may reach the data plane. Worth setting either way, and REQUIRED in spirit when
+  # tls.enabled is false: port 8282 is then plaintext HTTP and every request on it carries a
+  # bearer token, so only an ingress or the engine namespaces should match the selector below.
+  enabled: false
+  engineNamespaceSelector:
+    matchLabels: { kahshe.io/engines: "true" }
+  monitoringNamespaceSelector:
+    matchLabels: { kubernetes.io/metadata.name: monitoring }
+
+# The root filesystem is read-only. The JVM and Iceberg's S3 client stage uploads through
+# java.io.tmpdir, so /tmp is an emptyDir in every pod; the build's sorted runs get their own,
+# larger volume under it (build.scratchSizeLimit).
+tmpSizeLimit: 2Gi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  seccompProfile: { type: RuntimeDefault }
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: ["ALL"] }

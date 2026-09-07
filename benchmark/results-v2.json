@@ -1,0 +1,309 @@
+{
+  "storage": {
+    "timestamp": 1787808867.558221,
+    "artifact": "<warehouse>/logs/benchmark/_index/lucene-v2-f5",
+    "profile": "local",
+    "total_bytes": 32878334,
+    "by_group_bytes": {
+      "bundles": 32024371,
+      "terms_leaf": 825378,
+      "metadata": 21945,
+      "other": 6640
+    },
+    "by_group_files": {
+      "bundles": 100,
+      "terms_leaf": 1,
+      "metadata": 1,
+      "other": 2
+    },
+    "bundle_size_bytes": {
+      "count": 100,
+      "min": 4956,
+      "median": 319119,
+      "max": 639796
+    },
+    "other_files": [
+      ".index-metadata.json.crc",
+      ".terms-4640105948159743284.parquet.crc"
+    ],
+    "metadata_view": {
+      "format_version": 2,
+      "artifact_format": "lucene-v2-bundle-1",
+      "analyzer": "kahshe-ascii-v1",
+      "column": "msg",
+      "source_table_snapshot_id": 4640105948159743284,
+      "entries": 50,
+      "entries_without_bundle": 0,
+      "totals": {
+        "max_doc": 2000000,
+        "docs_with_terms": 2000000,
+        "sum_doc_freq": 16104872,
+        "sum_total_tf": 16270446
+      },
+      "previous": {
+        "bundles": [],
+        "terms": null
+      },
+      "bundles_referenced": 50,
+      "bundles_on_disk": 100,
+      "bundles_unreferenced": [
+        "bundles/.1cac62c2abc775cf-5ab5e511.bundle.crc",
+        "bundles/.22123e0d83a81fa6-d6f71ec5.bundle.crc",
+        "bundles/.25d5a27e1d8f4f76-b69458d7.bundle.crc",
+        "bundles/.2856604a4c94c890-9815b7b7.bundle.crc",
+        "bundles/.2c80937daf9b4f3a-474c9a36.bundle.crc",
+        "bundles/.41af7939b244ed98-30341372.bundle.crc",
+        "bundles/.43dbf467574915bc-2861f46d.bundle.crc",
+        "bundles/.480dea071c92a8ed-3aa05275.bundle.crc",
+        "bundles/.557c531bd69602fe-09b6b831.bundle.crc",
+        "bundles/.57079a83baf2942e-0e75d248.bundle.crc",
+        "bundles/.5a5c35268f1e4ad1-cc0c5e0b.bundle.crc",
+        "bundles/.5fe0ec1fcc8c0e63-09b48d15.bundle.crc",
+        "bundles/.60e9ce89559c4997-3e489761.bundle.crc",
+        "bundles/.67ae8143eb3df816-350f7b05.bundle.crc",
+        "bundles/.68c945f6c4d90931-4b1f125b.bundle.crc",
+        "bundles/.72e95dfeebb6950e-69eb6eab.bundle.crc",
+        "bundles/.749a1ca62032cd98-a4a5369a.bundle.crc",
+        "bundles/.77e61d18c11e223c-f0eeac6e.bundle.crc",
+        "bundles/.78ab5fcf94a5ebc8-d38eade0.bundle.crc",
+        "bundles/.791fba241721c55a-e931880a.bundle.crc",
+        "bundles/.792ef5db34ca6129-b43a07b4.bundle.crc",
+        "bundles/.8065bea5e396fcf7-00319b6b.bundle.crc",
+        "bundles/.85072fcfb35b6f7b-fc73d41f.bundle.crc",
+        "bundles/.881c9669d7f55f0a-5e7ff098.bundle.crc",
+        "bundles/.88d6efc63d1aa637-5402b964.bundle.crc",
+        "bundles/.897ef16df8a3eceb-3656315b.bundle.crc",
+        "bundles/.8b1d4dd36ac5b2f1-a261bfe6.bundle.crc",
+        "bundles/.952bcbc0ec257bc2-e6c06616.bundle.crc",
+        "bundles/.a371bc72dc6ecc83-35ef4719.bundle.crc",
+        "bundles/.a9edf6af93991add-aea3c650.bundle.crc",
+        "bundles/.aad2f01b006a29cd-06cd8798.bundle.crc",
+        "bundles/.adde66fd17c340bd-f8c7c180.bundle.crc",
+        "bundles/.ae5c7480bdf3ec90-97bd64b6.bundle.crc",
+        "bundles/.b2e21819f1eef0e9-b220b487.bundle.crc",
+        "bundles/.b5b9ccebd7c89213-baecbe3b.bundle.crc",
+        "bundles/.b8453822f42d9c2d-c663dc05.bundle.crc",
+        "bundles/.b86b4aca5ba734c4-234d74f6.bundle.crc",
+        "bundles/.c09d449279967106-920e512e.bundle.crc",
+        "bundles/.c382d4fb27cbb0f5-71017976.bundle.crc",
+        "bundles/.c674b68be891f4ef-67e3d591.bundle.crc",
+        "bundles/.c8cd0abb3271cfe1-19875419.bundle.crc",
+        "bundles/.cb88f80a5e9dd520-c818d5ae.bundle.crc",
+        "bundles/.d4896a6ecbac9398-e12f1a80.bundle.crc",
+        "bundles/.dba129bc944e962f-902a3b35.bundle.crc",
+        "bundles/.f2f6853ed9232d20-a2ff7f9e.bundle.crc",
+        "bundles/.f8a8e83e66b043f3-ee6b90db.bundle.crc",
+        "bundles/.f9acd1fea2fc64af-f05dadcc.bundle.crc",
+        "bundles/.fbec251830394788-855c708a.bundle.crc",
+        "bundles/.fe446a2f8398622e-93c5a1a8.bundle.crc",
+        "bundles/.fe60375664dc6c95-433e1580.bundle.crc"
+      ],
+      "bundles_unreferenced_bytes": 248744,
+      "current_terms_leaf": "file://<warehouse>/logs/benchmark/_index/lucene-v2-f5/terms-4640105948159743284.parquet",
+      "terms_leaves_present": [
+        "terms-4640105948159743284.parquet"
+      ]
+    },
+    "v1_artifact_reported": {
+      "value": "29MB",
+      "source": "benchmark/BENCHMARK.md, v3 update (2026-08-26/27), 2M rows / 50 files",
+      "approx_bytes_used_for_ratio": 29000000,
+      "note": "the v1 figure is recorded to two significant figures and its MB convention is not recorded; 1MB = 1,000,000 bytes is assumed here, so the ratio is approximate."
+    },
+    "v2_over_v1_ratio_approx": 1.134,
+    "proves": "the bytes this v2 artifact currently occupies, split by the three parts of the layout, as reported by the filesystem or the object listing.",
+    "does_not_prove": "a like-for-like v1 comparison: the v1 number quoted here comes from a different run and is recorded only to two significant figures. Superseded bundles and the prior terms leaf survive one publish by design (keep-last-two), so a total taken right after a publish includes one generation of garbage \u2014 'bundles_unreferenced' is reported so it can be subtracted. Data-file bytes are not included."
+  },
+  "search": {
+    "timestamp": 1787833278.708398,
+    "config": {
+      "profile": "local",
+      "kahshe": "http://localhost:8282",
+      "admin": "http://localhost:8283",
+      "prefix": "lakehouse",
+      "table": "logs.bench",
+      "auth": "oauth"
+    },
+    "reps": 35,
+    "warmup": 5,
+    "size": 10,
+    "recorded_v1_baseline": {
+      "source": "benchmark/BENCHMARK.md, v3 update (2026-08-26/27), 2M rows / 50 files",
+      "search_p50_ms": {
+        "quorum-epoch-777": {
+          "kahshe_v1": 1.55,
+          "opensearch": 4.08
+        },
+        "connection": {
+          "kahshe_v1": 1.05,
+          "opensearch": 2.03
+        },
+        "checkpoint stall": {
+          "kahshe_v1": 1.09,
+          "opensearch": 2.31
+        },
+        "timeout waiting quorum": {
+          "kahshe_v1": 2.23,
+          "opensearch": 3.79
+        }
+      },
+      "artifact_bytes_reported": "29MB",
+      "build_time_reported": "3.7s"
+    },
+    "queries": {
+      "quorum-epoch-777": {
+        "desc": "needle multi-token",
+        "kahshe_v2": {
+          "p50_ms": 5.9,
+          "p90_ms": 8.94,
+          "min_ms": 5.07,
+          "max_ms": 12.43,
+          "n": 30,
+          "status": 200,
+          "coverage": {
+            "files_total": 53,
+            "files_indexed": 53,
+            "snapshot_id": 7193274011580675358,
+            "analyzer": "kahshe-ascii-v1",
+            "stale": false,
+            "deletes_present": false,
+            "exactness": "advisory",
+            "ranking_exhaustive": true,
+            "groups_opened": 1,
+            "segments_opened": 32
+          },
+          "results_returned": 10
+        },
+        "v2_coverage_fields": {
+          "groups_opened": 1,
+          "segments_opened": 32,
+          "ranking_exhaustive": true,
+          "missing_fields": []
+        },
+        "v2_coverage_stable_across_reps": true,
+        "segments_opened_range": [
+          32,
+          32
+        ],
+        "recorded_v1_p50_ms": 1.55,
+        "recorded_opensearch_p50_ms": 4.08
+      },
+      "connection": {
+        "desc": "common single token",
+        "kahshe_v2": {
+          "p50_ms": 6.18,
+          "p90_ms": 6.66,
+          "min_ms": 5.56,
+          "max_ms": 7.72,
+          "n": 30,
+          "status": 200,
+          "coverage": {
+            "files_total": 53,
+            "files_indexed": 53,
+            "snapshot_id": 7193274011580675358,
+            "analyzer": "kahshe-ascii-v1",
+            "stale": false,
+            "deletes_present": false,
+            "exactness": "advisory",
+            "ranking_exhaustive": true,
+            "groups_opened": 2,
+            "segments_opened": 52
+          },
+          "results_returned": 10
+        },
+        "v2_coverage_fields": {
+          "groups_opened": 2,
+          "segments_opened": 52,
+          "ranking_exhaustive": true,
+          "missing_fields": []
+        },
+        "v2_coverage_stable_across_reps": true,
+        "segments_opened_range": [
+          52,
+          52
+        ],
+        "recorded_v1_p50_ms": 1.05,
+        "recorded_opensearch_p50_ms": 2.03
+      },
+      "checkpoint stall": {
+        "desc": "two tokens",
+        "kahshe_v2": {
+          "p50_ms": 2.16,
+          "p90_ms": 2.36,
+          "min_ms": 1.71,
+          "max_ms": 2.46,
+          "n": 30,
+          "status": 200,
+          "coverage": {
+            "files_total": 53,
+            "files_indexed": 53,
+            "snapshot_id": 7193274011580675358,
+            "analyzer": "kahshe-ascii-v1",
+            "stale": false,
+            "deletes_present": false,
+            "exactness": "advisory",
+            "ranking_exhaustive": true,
+            "groups_opened": 1,
+            "segments_opened": 8
+          },
+          "results_returned": 10
+        },
+        "v2_coverage_fields": {
+          "groups_opened": 1,
+          "segments_opened": 8,
+          "ranking_exhaustive": true,
+          "missing_fields": []
+        },
+        "v2_coverage_stable_across_reps": true,
+        "segments_opened_range": [
+          8,
+          8
+        ],
+        "recorded_v1_p50_ms": 1.09,
+        "recorded_opensearch_p50_ms": 2.31
+      },
+      "timeout waiting quorum": {
+        "desc": "three tokens (may be absent; zero-result timing is valid)",
+        "kahshe_v2": {
+          "p50_ms": 7.25,
+          "p90_ms": 7.84,
+          "min_ms": 6.56,
+          "max_ms": 8.79,
+          "n": 30,
+          "status": 200,
+          "coverage": {
+            "files_total": 53,
+            "files_indexed": 53,
+            "snapshot_id": 7193274011580675358,
+            "analyzer": "kahshe-ascii-v1",
+            "stale": false,
+            "deletes_present": false,
+            "exactness": "advisory",
+            "ranking_exhaustive": true,
+            "groups_opened": 2,
+            "segments_opened": 52
+          },
+          "results_returned": 10
+        },
+        "v2_coverage_fields": {
+          "groups_opened": 2,
+          "segments_opened": 52,
+          "ranking_exhaustive": true,
+          "missing_fields": []
+        },
+        "v2_coverage_stable_across_reps": true,
+        "segments_opened_range": [
+          52,
+          52
+        ],
+        "recorded_v1_p50_ms": 2.23,
+        "recorded_opensearch_p50_ms": 3.79
+      }
+    },
+    "proves": "warm single-client `_search` wall-clock latency for these queries against this deployment, on the same query list and rep discipline as v3_bench.py's `search`, with each latency paired to the coverage the response claimed and, where the admin port is reachable, to the serve-side counters scraped around that query's reps.",
+    "does_not_prove": "anything about concurrency, cold caches, or other query shapes; and the recorded v1 numbers embedded here were measured on other runs and other hardware, so a side-by-side A/B on one machine is the only sound v1-vs-v2 latency claim. A fast query with ranking_exhaustive=false is not a win and is flagged, not averaged away.",
+    "serve_counter_note": "serve-side counters unavailable at http://localhost:8283/metrics: HTTPConnectionPool(host='localhost', port=8283): Max retries exceeded with url: /metrics (Caused by NewConnectionError(\"HTTPConnection(host='localhost', port=8283): Failed to establish a new connection: [Errno 61] Connection refused\"))",
+    "non_exhaustive_queries": [],
+    "stats_clamped_queries": []
+  }
+}

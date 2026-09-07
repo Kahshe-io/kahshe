@@ -1,0 +1,14 @@
+rules:
+  - id: 00000000-0000-4000-8000-000000000001
+    title: Test rule
+    severity: high
+    prefix: lakehouse
+    table: logs.httplogs
+    detection:
+      sel0:
+        - { column: request, starts_with: [/images] }
+      sel1:
+        - { column: request, ends_with: [.gif] }
+      sel2:
+        - { column: request, contains: [admin] }
+      condition: sel0 or sel1 or sel2

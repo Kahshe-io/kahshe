@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Two JDKs on purpose. The modules build on 17; the Trino overlay under dev/trino-patch
+      # compiles against Trino's own toolchain, which `check` depends on, so a 17-only runner
+      # fails to resolve a toolchain rather than failing a test — an error that reads as a build
+      # problem instead of a missing JDK.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            25
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build and test
+        run: ./gradlew build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # The pySigma backend's own suite. SigmaGeneratedRulesTest (Java) loads the fixtures this
+      # writes, so a backend change that is not regenerated is caught here rather than by a
+      # stale committed fixture agreeing with itself.
+      - name: pySigma backend tests
+        run: |
+          pip install --quiet ./sigma pytest
+          python -m pytest sigma/tests -q
+
+      # The README's quickstart is `docker compose up`, and the image build is the one path no
+      # other job exercises. It was broken undetected: the Dockerfile never copied the analysis
+      # module after that module was extracted, so the documented front door could not build.
+      - name: Build the container image
+        run: docker build -t kahshe:ci .
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/test/

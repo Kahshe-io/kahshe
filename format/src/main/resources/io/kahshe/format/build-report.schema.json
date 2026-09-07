@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kahshe.dev/schemas/build-report/v1",
+  "title": "kahshe build report",
+  "description": "The record of one index build for one column, written beside the term metadata after every publish. Numbers follow the Iceberg REST metrics vocabulary (report-type, table-name, snapshot-id, metrics of counters and timers, metadata); the lists and the alerts are kahshe's own.",
+  "type": "object",
+  "required": ["format-version", "report-type", "table-name", "snapshot-id", "metrics", "metadata", "files", "leaves", "alerts"],
+  "properties": {
+    "format-version": {"const": 1},
+    "report-type": {"const": "kahshe-build"},
+    "table-name": {
+      "type": "object",
+      "required": ["namespace", "name"],
+      "properties": {"namespace": {"type": "array", "items": {"type": "string"}}, "name": {"type": "string"}}
+    },
+    "snapshot-id": {"type": "integer"},
+    "metrics": {
+      "type": "object",
+      "description": "Counters {unit, value} and timers {time-unit, count, total-duration}; a reader ignores names it does not know.",
+      "required": ["files-covered", "files-added", "files-departed", "build"],
+      "additionalProperties": {
+        "oneOf": [
+          {"type": "object", "required": ["unit", "value"], "properties": {"unit": {"type": "string"}, "value": {"type": "integer"}}},
+          {"type": "object", "required": ["time-unit", "count", "total-duration"], "properties": {"time-unit": {"type": "string"}, "count": {"type": "integer"}, "total-duration": {"type": "integer"}}}
+        ]
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["build-id", "prefix", "column", "field-id", "kind", "analyzer", "grams", "started-ms", "published-ms"],
+      "properties": {
+        "build-id": {"type": "string"},
+        "previous-build-id": {"type": "string", "description": "absent on a column's first build; a reader that saw a different id than this names a missed report"},
+        "prefix": {"type": "string"},
+        "column": {"type": "string"},
+        "field-id": {"type": "string"},
+        "kind": {"enum": ["FULL", "INCREMENTAL", "RESTAMP"]},
+        "analyzer": {"type": "string"},
+        "grams": {"type": "string"},
+        "started-ms": {"type": "string"},
+        "published-ms": {"type": "string"}
+      },
+      "additionalProperties": {"type": "string"}
+    },
+    "files": {
+      "type": "object",
+      "required": ["added", "departed"],
+      "properties": {"added": {"type": "array", "items": {"type": "string"}}, "departed": {"type": "array", "items": {"type": "string"}}}
+    },
+    "leaves": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "alerts": {"type": "array", "items": {"type": "object"}, "description": "the payloads the build's listener raised, in the watch webhook's shape"}
+  }
+}

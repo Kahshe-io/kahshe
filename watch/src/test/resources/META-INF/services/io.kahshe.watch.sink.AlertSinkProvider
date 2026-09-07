@@ -1,0 +1,3 @@
+# Test-only. A provider from a source set the main services file knows nothing about: proof that
+# discovery is the classpath, not a list in AlertSinks.
+io.kahshe.watch.RecordingSink$Provider

@@ -1,0 +1,21 @@
+/* Kahshe — design tokens v1.1 (Dual)
+   Colour rule: teal = identity & structure. Amber = a match. Neutrals = everything else. */
+:root{
+  --kh-ink:          #0C1417;
+  --kh-primary:      #12727C; /* brackets, links, focus, active */
+  --kh-primary-tint: #5FBFC7; /* teal's stand-in on dark grounds only */
+  --kh-signal:       #F0A62B; /* a match — dark grounds only */
+  --kh-signal-deep:  #8A5A0F; /* a match — light grounds */
+  --kh-signal-wash:  #FDF4E4; /* matched row background, light grounds */
+  --kh-surface:      #F2F5F6;
+  --kh-line:         #E0E7E8;
+  --kh-grey:         #647579;
+  --kh-wash:         #DCEFF1;
+
+  --kh-font-sans: "IBM Plex Sans", Inter, system-ui, -apple-system, sans-serif;
+  --kh-font-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --kh-tracking-wordmark: -0.03em;
+  --kh-tracking-heading:  -0.022em;
+  --kh-radius-tile:       0.22em; /* of tile size */
+}

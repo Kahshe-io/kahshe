@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kahshe — Brand Document v1.2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0C1417;
+  --primary:#12727C;
+  --tint:#5FBFC7;
+  --signal:#F0A62B;
+  --signal-deep:#8A5A0F;
+  --surface:#F2F5F6;
+  --line:#E0E7E8;
+  --grey:#647579;
+  --wash:#DCEFF1;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#fff;color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.doc{max-width:920px;margin:0 auto;padding:clamp(24px,5vw,72px) clamp(20px,5vw,44px) 90px}
+h1{font-size:clamp(30px,6vw,46px);font-weight:600;letter-spacing:-.03em;margin:0;line-height:1.05}
+h2{font-size:clamp(21px,3.4vw,27px);font-weight:600;letter-spacing:-.022em;margin:0 0 10px;line-height:1.2}
+h3{font-size:15px;font-weight:600;margin:0 0 6px}
+p{margin:0 0 14px}
+.sec{padding-top:clamp(42px,7vw,72px);margin-top:clamp(28px,5vw,42px);border-top:1px solid var(--line)}
+.sec-no{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--primary);margin:0 0 12px}
+.lead{color:var(--grey);max-width:62ch;font-size:15.5px}
+.small{font-size:13.8px}
+.blocks{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));margin-top:24px}
+.block{border:1px solid var(--line);border-radius:14px;padding:22px}
+.block p{margin:0;font-size:13.5px;color:var(--grey);line-height:1.55}
+.stage{background:var(--surface);border-radius:16px;padding:clamp(32px,6vw,56px) 24px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:34px;margin:22px 0}
+.stage.dark{background:var(--ink)}
+.stage.tight{padding:26px 22px}
+
+.lk.hero{height:clamp(46px,9vw,76px)}
+.lk{display:inline-block;height:64px;width:auto;color:var(--ink);--brk:var(--primary)}
+.lk.s{height:26px}.lk.xs{height:17px}
+.stage.dark .lk{color:#fff;--brk:var(--tint)}
+.stage.dark .lk.rev{--brk:#fff}
+.lk.mono1{--brk:var(--ink)}
+.tl{width:120px;height:120px;color:#fff;--brk:var(--tint);--tilebg:var(--ink)}
+.tl.p{--tilebg:var(--primary);--brk:#9BD3D8}
+.tl.s{width:44px;height:44px}.tl.xs{width:20px;height:20px}
+/* legacy CSS lockup — retained only for the misuse examples */
+.lockup{font-weight:600;letter-spacing:-.03em;line-height:1;display:inline-flex;align-items:baseline;font-size:17px}
+.lockup .br{font-family:var(--mono);font-weight:400;color:var(--primary);letter-spacing:0}
+.lockup .br.l{margin-right:.045em}.lockup .br.r{margin-left:.045em}
+.lockup.xs{font-size:17px}
+.tile{width:120px;height:120px;border-radius:26px;background:var(--ink);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:56px;color:#fff;line-height:1}
+.tile .br{font-family:var(--mono);font-weight:400;color:var(--tint)}
+.tile.s{width:44px;height:44px;font-size:21px}.tile.xs{width:20px;height:20px;font-size:10px}
+.sizerow{display:flex;align-items:flex-end;gap:26px;flex-wrap:wrap}
+.sizecap{font-family:var(--mono);font-size:10px;color:var(--grey);display:block;text-align:center;margin-top:8px}
+.clear{position:relative;display:inline-block;padding:38px;background:repeating-linear-gradient(45deg,var(--wash) 0 6px,transparent 6px 12px);border-radius:8px}
+.clear .inner{background:var(--surface);padding:0 4px}
+
+.dont{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:22px}
+.dont .d{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.dont .box{height:92px;display:flex;align-items:center;justify-content:center;background:var(--surface)}
+.dont .lbl{padding:10px 14px;font-size:12.5px;color:var(--grey);border-top:1px solid var(--line);line-height:1.4}
+.dont .lbl b{color:#B03A2E;font-family:var(--mono);font-size:10px;display:block;margin-bottom:3px;letter-spacing:.05em}
+
+.spec{border-top:1px solid var(--line);padding:22px 0;display:grid;gap:8px}
+.spec:first-of-type{border-top:0}
+.spec .k{font-family:var(--mono);font-size:10.5px;color:var(--grey);letter-spacing:.06em}
+.d1{font-size:clamp(30px,5vw,42px);font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.d2{font-size:22px;font-weight:600;letter-spacing:-.02em}
+.d3{font-size:16.5px;max-width:58ch}
+.d4{font-family:var(--mono);font-size:14px}
+.charset{font-family:var(--mono);font-size:15px;color:var(--grey);word-spacing:.2em;line-height:1.9}
+
+.ramp{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:20px}
+.sw{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sw .f{height:76px}
+.sw .m{padding:11px 13px}
+.sw b{display:block;font-size:12.5px;font-weight:600}
+.sw code{font-family:var(--mono);font-size:10.5px;color:var(--grey)}
+.sw .job{display:block;font-size:11.5px;color:var(--grey);margin-top:6px;line-height:1.4}
+
+.rules{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:24px}
+.rules .r{display:grid;grid-template-columns:1fr;gap:2px;padding:15px 18px;border-top:1px solid var(--line);font-size:14px;line-height:1.5}
+@media(min-width:640px){.rules .r{grid-template-columns:120px 1fr;gap:18px;align-items:baseline}}
+.rules .r:first-child{border-top:0;background:var(--surface);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--grey)}
+.rules .r .who{font-weight:600;font-size:13.5px}
+.rules .r .who i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
+.rules .r .what{color:var(--grey);font-size:13.8px}
+.rules .r .what b{color:var(--ink);font-weight:600}
+
+.contrast{margin-top:22px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.contrast .r{display:flex;justify-content:space-between;gap:14px;padding:12px 16px;border-top:1px solid var(--line);font-size:13.5px}
+.contrast .r:first-child{border-top:0;background:var(--surface);font-weight:600;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--grey)}
+.contrast .r span:last-child{font-family:var(--mono);color:var(--grey)}
+
+.term{background:var(--ink);border-radius:14px;padding:24px;font-family:var(--mono);font-size:13px;line-height:1.75;color:#C0CCCF;overflow-x:auto}
+.term pre{margin:0;font:inherit}
+.term .p{color:var(--tint)}
+.term .s{color:var(--signal)}
+.term .d{color:#5B6B6F}
+.term .w{color:#fff}
+.readme{border:1px solid var(--line);border-radius:14px;padding:26px;margin-top:16px}
+.badges{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
+.badge{font-family:var(--mono);font-size:10.5px;display:flex;border-radius:4px;overflow:hidden}
+.badge .a{background:var(--ink);color:#fff;padding:3px 7px}
+.badge .b{background:var(--primary);color:#fff;padding:3px 7px}
+.browser{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:16px}
+.browser .bar{background:var(--surface);padding:9px 14px;display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--line)}
+.browser .fav{width:16px;height:16px;border-radius:4px;background:var(--ink);color:#fff;font-size:8px;display:flex;align-items:center;justify-content:center;font-weight:600}
+.browser .u{font-family:var(--mono);font-size:11px;color:var(--grey)}
+.browser .pg{padding:22px 18px;font-size:13px;color:var(--grey)}
+.tbl{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:16px;font-size:13.5px}
+.tbl .row{display:flex;justify-content:space-between;padding:11px 16px;border-top:1px solid var(--line);font-family:var(--mono);font-size:12.5px}
+.tbl .row:first-child{border-top:0;background:var(--surface);color:var(--grey)}
+.tbl .row.hit{background:#FDF4E4}
+.tbl .row.hit span:last-child{color:var(--signal-deep);font-weight:500}
+
+.code{background:var(--surface);border-radius:12px;padding:20px 22px;font-family:var(--mono);font-size:12.5px;line-height:1.8;overflow-x:auto;white-space:pre}
+.code .c{color:var(--grey)}
+.code .v{color:var(--primary)}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:12.5px;color:var(--grey);display:grid;gap:6px}
+@media print{body{font-size:11pt}.sec{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="wm" viewBox="0 0 207.22 46.70"><path d="M225 -138V760H505V698H294V-76H505V-138Z" transform="translate(-11.700 39.520) scale(0.052000 -0.052000)" fill="var(--brk,#12727C)"/><path d="M74 740H202V294H207L276 388L393 522H538L358 320L557 0H405L271 234L202 159V0H74Z" transform="translate(21.960 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M458 0Q416 0 391.5 24.5Q367 49 361 90H355Q342 39 302.0 13.5Q262 -12 203 -12Q123 -12 80.0 30.0Q37 72 37 142Q37 223 95.0 262.5Q153 302 260 302H349V340Q349 384 326.0 408.0Q303 432 252 432Q207 432 179.5 412.5Q152 393 133 366L57 434Q86 479 134.0 506.5Q182 534 261 534Q367 534 422.0 486.0Q477 438 477 348V102H529V0ZM246 81Q289 81 319.0 100.0Q349 119 349 156V225H267Q167 225 167 161V144Q167 112 187.5 96.5Q208 81 246 81Z" transform="translate(49.624 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M74 740H202V435H207Q223 477 257.5 505.5Q292 534 353 534Q434 534 477.0 481.0Q520 428 520 330V0H392V317Q392 373 372.0 401.0Q352 429 306 429Q286 429 267.5 423.5Q249 418 234.5 407.5Q220 397 211.0 381.5Q202 366 202 345V0H74Z" transform="translate(77.132 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M245 -12Q170 -12 119.0 13.5Q68 39 29 84L107 160Q136 127 170.5 108.0Q205 89 250 89Q296 89 316.5 105.0Q337 121 337 149Q337 172 322.5 185.5Q308 199 273 204L221 211Q136 222 91.5 259.5Q47 297 47 369Q47 407 61.0 437.5Q75 468 101.0 489.5Q127 511 163.5 522.5Q200 534 245 534Q283 534 312.5 528.5Q342 523 366.0 512.5Q390 502 410.0 486.5Q430 471 449 452L374 377Q351 401 319.0 417.0Q287 433 249 433Q207 433 188.5 418.0Q170 403 170 379Q170 353 185.5 339.5Q201 326 238 320L291 313Q460 289 460 159Q460 121 444.5 89.5Q429 58 401.0 35.5Q373 13 333.5 0.5Q294 -12 245 -12Z" transform="translate(106.148 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M74 740H202V435H207Q223 477 257.5 505.5Q292 534 353 534Q434 534 477.0 481.0Q520 428 520 330V0H392V317Q392 373 372.0 401.0Q352 429 306 429Q286 429 267.5 423.5Q249 418 234.5 407.5Q220 397 211.0 381.5Q202 366 202 345V0H74Z" transform="translate(130.536 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M285 -12Q227 -12 181.5 7.5Q136 27 104.5 62.5Q73 98 56.0 148.5Q39 199 39 262Q39 324 55.5 374.0Q72 424 103.0 459.5Q134 495 179.0 514.5Q224 534 281 534Q342 534 387.0 513.0Q432 492 461.0 456.0Q490 420 504.5 372.5Q519 325 519 271V229H172V216Q172 159 204.0 124.5Q236 90 299 90Q347 90 377.5 110.0Q408 130 432 161L501 84Q469 39 413.5 13.5Q358 -12 285 -12ZM283 438Q232 438 202.0 404.0Q172 370 172 316V308H386V317Q386 371 359.5 404.5Q333 438 283 438Z" transform="translate(159.552 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M375 760V-138H95V-76H306V698H95V760Z" transform="translate(187.720 39.520) scale(0.052000 -0.052000)" fill="var(--brk,#12727C)"/></symbol><symbol id="wm-idx" viewBox="0 0 221.27 46.70"><path d="M225 -138V760H505V698H294V-76H505V-138Z" transform="translate(-11.700 39.520) scale(0.052000 -0.052000)" fill="var(--brk,#12727C)"/><path d="M74 740H202V294H207L276 388L393 522H538L358 320L557 0H405L271 234L202 159V0H74Z" transform="translate(21.960 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M458 0Q416 0 391.5 24.5Q367 49 361 90H355Q342 39 302.0 13.5Q262 -12 203 -12Q123 -12 80.0 30.0Q37 72 37 142Q37 223 95.0 262.5Q153 302 260 302H349V340Q349 384 326.0 408.0Q303 432 252 432Q207 432 179.5 412.5Q152 393 133 366L57 434Q86 479 134.0 506.5Q182 534 261 534Q367 534 422.0 486.0Q477 438 477 348V102H529V0ZM246 81Q289 81 319.0 100.0Q349 119 349 156V225H267Q167 225 167 161V144Q167 112 187.5 96.5Q208 81 246 81Z" transform="translate(49.624 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M74 740H202V435H207Q223 477 257.5 505.5Q292 534 353 534Q434 534 477.0 481.0Q520 428 520 330V0H392V317Q392 373 372.0 401.0Q352 429 306 429Q286 429 267.5 423.5Q249 418 234.5 407.5Q220 397 211.0 381.5Q202 366 202 345V0H74Z" transform="translate(77.132 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M245 -12Q170 -12 119.0 13.5Q68 39 29 84L107 160Q136 127 170.5 108.0Q205 89 250 89Q296 89 316.5 105.0Q337 121 337 149Q337 172 322.5 185.5Q308 199 273 204L221 211Q136 222 91.5 259.5Q47 297 47 369Q47 407 61.0 437.5Q75 468 101.0 489.5Q127 511 163.5 522.5Q200 534 245 534Q283 534 312.5 528.5Q342 523 366.0 512.5Q390 502 410.0 486.5Q430 471 449 452L374 377Q351 401 319.0 417.0Q287 433 249 433Q207 433 188.5 418.0Q170 403 170 379Q170 353 185.5 339.5Q201 326 238 320L291 313Q460 289 460 159Q460 121 444.5 89.5Q429 58 401.0 35.5Q373 13 333.5 0.5Q294 -12 245 -12Z" transform="translate(106.148 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M74 740H202V435H207Q223 477 257.5 505.5Q292 534 353 534Q434 534 477.0 481.0Q520 428 520 330V0H392V317Q392 373 372.0 401.0Q352 429 306 429Q286 429 267.5 423.5Q249 418 234.5 407.5Q220 397 211.0 381.5Q202 366 202 345V0H74Z" transform="translate(130.536 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M285 -12Q227 -12 181.5 7.5Q136 27 104.5 62.5Q73 98 56.0 148.5Q39 199 39 262Q39 324 55.5 374.0Q72 424 103.0 459.5Q134 495 179.0 514.5Q224 534 281 534Q342 534 387.0 513.0Q432 492 461.0 456.0Q490 420 504.5 372.5Q519 325 519 271V229H172V216Q172 159 204.0 124.5Q236 90 299 90Q347 90 377.5 110.0Q408 130 432 161L501 84Q469 39 413.5 13.5Q358 -12 285 -12ZM283 438Q232 438 202.0 404.0Q172 370 172 316V308H386V317Q386 371 359.5 404.5Q333 438 283 438Z" transform="translate(159.552 39.520) scale(0.052000 -0.052000)" fill="currentColor"/><path d="M375 760V-138H95V-76H306V698H95V760Z" transform="translate(187.720 39.520) scale(0.052000 -0.052000)" fill="var(--brk,#12727C)"/><path d="M300 -12Q236 -12 190.0 12.5Q144 37 114.0 83.0Q84 129 70.0 196.0Q56 263 56 349Q56 434 70.0 501.5Q84 569 114.0 615.0Q144 661 190.0 685.5Q236 710 300 710Q364 710 410.0 685.5Q456 661 486.0 615.0Q516 569 530.0 501.5Q544 434 544 349Q544 263 530.0 196.0Q516 129 486.0 83.0Q456 37 410.0 12.5Q364 -12 300 -12ZM300 61Q342 61 372.0 77.5Q402 94 420.5 124.0Q439 154 448.0 196.5Q457 239 457 292V406Q457 458 448.0 501.0Q439 544 420.5 574.0Q402 604 372.0 620.5Q342 637 300 637Q258 637 228.0 620.5Q198 604 179.5 574.0Q161 544 152.0 501.0Q143 458 143 406V292Q143 239 152.0 196.5Q161 154 179.5 124.0Q198 94 228.0 77.5Q258 61 300 61ZM300 290Q265 290 251.5 304.0Q238 318 238 338V360Q238 380 251.5 394.0Q265 408 300 408Q335 408 348.5 394.0Q362 380 362 360V338Q362 318 348.5 304.0Q335 290 300 290Z" transform="translate(209.955 39.520) scale(0.020800 -0.020800)" fill="var(--brk,#12727C)"/></symbol><symbol id="icon-glyphs" viewBox="0 0 120.00 120.00"><path d="M225 -138V760H505V698H294V-76H505V-138Z" transform="translate(12.665 78.017) scale(0.052800 -0.052800)" fill="var(--brk,#12727C)"/><path d="M74 740H202V294H207L276 388L393 522H538L358 320L557 0H405L271 234L202 159V0H74Z" transform="translate(43.342 78.017) scale(0.052800 -0.052800)" fill="currentColor"/><path d="M375 760V-138H95V-76H306V698H95V760Z" transform="translate(75.655 78.017) scale(0.052800 -0.052800)" fill="var(--brk,#12727C)"/></symbol></svg>
+<div class="doc">
+
+  <header>
+    <p class="sec-no">Brand document · v1.2 · Dual locked · artwork outlined</p>
+    <h1>Kahshe</h1>
+    <p class="lead" style="margin-top:16px">An index and search system for Iceberg tables. This document defines the mark, the typeface, and a two-accent colour system where cold carries identity and warm means a match — and nothing else gets colour at all.</p>
+    <div class="stage">
+      <svg class="lk hero" viewBox="0 0 443.76 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="kahshe"><use href="#wm"/></svg>
+    </div>
+  </header>
+
+  <section class="sec">
+    <p class="sec-no">01</p>
+    <h2>The mark</h2>
+    <p class="lead">The name inside square brackets. The brackets are set in the mono weight of the same family, so they stay squarer and more mechanical than the letters they enclose — the detail that keeps this from being a generic bracketed wordmark.</p>
+    <div class="blocks">
+      <div class="block"><h3>Primary</h3><p>Ink name, teal brackets. The default everywhere.</p></div>
+      <div class="block"><h3>Indexed</h3><p>With subscript zero — array access. Use where the mark stands alone with no tagline.</p></div>
+      <div class="block"><h3>One colour</h3><p>All ink or all white. Laser, stamp, embroidery, dark UI chrome.</p></div>
+    </div>
+    <div class="stage">
+      <svg class="lk s" viewBox="0 0 443.76 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="kahshe"><use href="#wm"/></svg>
+      <svg class="lk s" viewBox="0 0 473.85 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="kahshe"><use href="#wm-idx"/></svg>
+      <svg class="lk s mono1" viewBox="0 0 443.76 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="kahshe"><use href="#wm"/></svg>
+    </div>
+    <div class="stage dark">
+      <svg class="lk s" viewBox="0 0 443.76 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="kahshe"><use href="#wm"/></svg>
+      <svg class="lk s rev" viewBox="0 0 443.76 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="kahshe"><use href="#wm"/></svg>
+    </div>
+
+    <h3 style="margin-top:32px">Clearspace and minimum size</h3>
+    <p class="lead small">Clear space on all four sides equals the height of a bracket. Minimum wordmark width 90px; below that, use the icon.</p>
+    <div class="stage tight">
+      <span class="clear"><span class="inner"><svg class="lk s" viewBox="0 0 443.76 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="kahshe"><use href="#wm"/></svg></span></span>
+    </div>
+
+
+    <h3 style="margin-top:34px">Construction — spacing is not symmetrical</h3>
+    <p class="lead small">The two bracket gaps are deliberately unequal. <em>k</em> meets the opening bracket with a flat vertical stem; <em>e</em> is x-height only and sits between the closing bracket's arms, so its nearest neighbour is the far-off stem. Equal measured gaps read as unequal white. These values equalise the <strong>white area</strong> instead, which is what the eye actually judges.</p>
+    <div class="rules" style="margin-top:18px">
+      <div class="r"><span>Junction</span><span>Ink gap · average white</span></div>
+      <div class="r"><span class="who">[ &rarr; k</span><span class="what"><b>0.2163em</b> — 21.45px average white at 52pt</span></div>
+      <div class="r"><span class="who">e &rarr; ]</span><span class="what"><b>0.1177em</b> — 21.45px average white. Roughly half the left gap, and correct.</span></div>
+      <div class="r"><span class="who">Icon [ &rarr; k</span><span class="what"><b>0.150em</b> — symmetrical. The tile crops the composition, so the frame reads as a frame and even gaps are the stronger cue.</span></div>
+      <div class="r"><span class="who">Icon k &rarr; ]</span><span class="what"><b>0.150em</b> — plus a 1.6px downward nudge so the <em>k</em> sits on the tile's optical centre.</span></div>
+      <div class="r"><span class="who">Tracking</span><span class="what"><b>&minus;0.03em</b> across the word. The <em>ka</em> pair runs slightly open and cannot be tightened — its minimum gap is already 0.62px.</span></div>
+    </div>
+    <p class="lead small" style="margin-top:14px">Do not normalise these to match each other. Use the supplied SVGs rather than setting the mark in live type.</p>
+
+    <h3 style="margin-top:32px">Never</h3>
+    <div class="dont">
+      <div class="d"><div class="box"><span class="lockup xs" style="letter-spacing:.22em"><span class="br l">[</span>kahshe<span class="br r">]</span></span></div><div class="lbl"><b>NO</b>Letterspace the name. Tracking stays −0.03em.</div></div>
+      <div class="d"><div class="box"><span class="lockup xs" style="text-transform:uppercase"><span class="br l">[</span>kahshe<span class="br r">]</span></span></div><div class="lbl"><b>NO</b>Set in capitals. Lowercase, always.</div></div>
+      <div class="d"><div class="box"><span class="lockup xs"><span class="br l" style="font-family:var(--sans);font-weight:600">{</span>kahshe<span class="br r" style="font-family:var(--sans);font-weight:600">}</span></span></div><div class="lbl"><b>NO</b>Swap bracket type or weight. Square, mono, regular.</div></div>
+      <div class="d"><div class="box"><span class="lockup xs"><span class="br l" style="color:#F0A62B">[</span>kahshe<span class="br r" style="color:#F0A62B">]</span></span></div><div class="lbl"><b>NO</b>Amber brackets. Amber never carries identity.</div></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <p class="sec-no">02</p>
+    <h2>Icon</h2>
+    <p class="lead">Where a square is required — avatar, favicon, registry, app icon — the mark contracts to a bracketed <em>k</em> on a solid tile.</p>
+    <div class="stage">
+      <div class="sizerow">
+        <div><svg class="tl " viewBox="0 0 120 120" role="img" aria-label="kahshe icon"><rect width="120" height="120" rx="26.04" fill="var(--tilebg,#0C1417)"/><use href="#icon-glyphs"/></svg><span class="sizecap">120px</span></div>
+        <div><svg class="tl p" viewBox="0 0 120 120" role="img" aria-label="kahshe icon"><rect width="120" height="120" rx="26.04" fill="var(--tilebg,#0C1417)"/><use href="#icon-glyphs"/></svg><span class="sizecap">teal fill</span></div>
+        <div><svg class="tl s" viewBox="0 0 120 120" role="img" aria-label="kahshe icon"><rect width="120" height="120" rx="26.04" fill="var(--tilebg,#0C1417)"/><use href="#icon-glyphs"/></svg><span class="sizecap">44px</span></div>
+        <div><svg class="tl xs" viewBox="0 0 120 120" role="img" aria-label="kahshe icon"><rect width="120" height="120" rx="26.04" fill="var(--tilebg,#0C1417)"/><use href="#icon-glyphs"/></svg><span class="sizecap">20px</span></div>
+      </div>
+    </div>
+    <p class="lead small">At 16px, drop the brackets and ship the bare <em>k</em>. That is the only permitted alteration to the icon.</p>
+  </section>
+
+  <section class="sec">
+    <p class="sec-no">03</p>
+    <h2>Typeface</h2>
+    <p class="lead"><strong>IBM Plex Sans</strong> and <strong>IBM Plex Mono</strong>, both SIL Open Font License — which permits logo use, embedding, and redistribution. That matters for a mark that lives in a repository: the licence travels with it.</p>
+    <p class="lead">Plex was drawn for a computing company and reads engineered rather than fashionable. Its mono has properly squared brackets, which is the entire mechanism of this wordmark. The shipped logo files are outlined paths generated from these metrics, so they carry no font dependency at render time.</p>
+    <div class="spec"><div class="k">WORDMARK — Plex Sans 600, brackets Plex Mono 400, tracking −0.03em</div>
+      <div class="d1"><span style="font-family:var(--mono);font-weight:400;color:var(--primary)">[</span>kahshe<span style="font-family:var(--mono);font-weight:400;color:var(--primary)">]</span></div></div>
+    <div class="spec"><div class="k">HEADINGS — Plex Sans 600, −0.022em</div><div class="d2">Pruned 412 files before reading one</div></div>
+    <div class="spec"><div class="k">BODY — Plex Sans 400, 16px / 1.6</div><div class="d3">Kahshe keeps a searchable index of every Iceberg partition, so a query opens three files instead of forty thousand.</div></div>
+    <div class="spec"><div class="k">UTILITY — Plex Mono 400 · paths, counts, flags, output</div><div class="d4">kahshe search 'src_ip = 10.4.2.9' --since 24h</div></div>
+    <div class="spec"><div class="k">CHARACTER SET — the glyphs this brand leans on</div><div class="charset">[ ] { } ( ) &lt; &gt; / \ | · → ↓ ^ 0 1 2 3 4 5 6 7 8 9</div></div>
+    <div class="blocks">
+      <div class="block"><h3>Fallbacks</h3><p>Inter, then system sans. For mono: JetBrains Mono, then ui-monospace. Both OFL.</p></div>
+      <div class="block"><h3>Rejected</h3><p>Inter — safe but voiceless. Geist — reads as Vercel's. Space Grotesk — too much personality for infrastructure.</p></div>
+      <div class="block"><h3>Weights</h3><p>Four only: Sans 400/600, Mono 400/500. Anything else is drift.</p></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <p class="sec-no">04</p>
+    <h2>Colour</h2>
+    <p class="lead">Two accents, one job each. Teal is identity and structure. Amber is a match and nothing else. Everything else in the system is neutral — if something is coloured, something is true about it.</p>
+
+    <div class="ramp">
+      <div class="sw"><div class="f" style="background:#0C1417"></div><div class="m"><b>Ink</b><code>#0C1417</code><span class="job">Text, dark grounds, the icon tile</span></div></div>
+      <div class="sw"><div class="f" style="background:#12727C"></div><div class="m"><b>Teal</b><code>#12727C</code><span class="job">Brackets, links, focus, active state</span></div></div>
+      <div class="sw"><div class="f" style="background:#5FBFC7"></div><div class="m"><b>Teal tint</b><code>#5FBFC7</code><span class="job">Teal's stand-in on dark grounds only</span></div></div>
+      <div class="sw"><div class="f" style="background:#F0A62B"></div><div class="m"><b>Signal</b><code>#F0A62B</code><span class="job">A match — on dark grounds only</span></div></div>
+      <div class="sw"><div class="f" style="background:#8A5A0F"></div><div class="m"><b>Signal deep</b><code>#8A5A0F</code><span class="job">A match, on light grounds</span></div></div>
+      <div class="sw"><div class="f" style="background:#647579"></div><div class="m"><b>Grey</b><code>#647579</code><span class="job">Secondary text, metadata, everything else</span></div></div>
+    </div>
+
+    <h3 style="margin-top:34px">Discipline</h3>
+    <p class="lead small">A two-accent system only works while the split holds. These are the rules that keep it from rotting into decoration.</p>
+    <div class="rules">
+      <div class="r"><span>Colour</span><span>Permitted use</span></div>
+      <div class="r"><span class="who"><i style="background:#12727C"></i>Teal</span><span class="what">Brackets in the wordmark, links, focus rings, active nav, section numbers, and the tool's own voice in CLI output. <b>Never</b> on a value, a count, or a result.</span></div>
+      <div class="r"><span class="who"><i style="background:#F0A62B"></i>Amber</span><span class="what">A hit count, a matched row, a highlighted partition, the file that was actually read. <b>Never</b> a heading, a button, a logo, or a chart series that isn't a match.</span></div>
+      <div class="r"><span class="who"><i style="background:#647579"></i>Neutrals</span><span class="what">Everything else, without exception. Surfaces, rules, metadata, secondary text, disabled states, and every chart series that isn't the match.</span></div>
+      <div class="r"><span class="who">Both</span><span class="what">Never on the same element. If something is both identity and result, it is a result — amber wins, teal steps back.</span></div>
+      <div class="r"><span class="who">A third</span><span class="what">Means you found a new state. Name the state before you colour it. Errors take red from the system palette, not amber — amber must keep meaning "found".</span></div>
+    </div>
+
+    <div class="contrast">
+      <div class="r"><span>Pair</span><span>Ratio</span></div>
+      <div class="r"><span>Ink on white</span><span>18.6:1 · AAA</span></div>
+      <div class="r"><span>Teal on white</span><span>5.6:1 · AA</span></div>
+      <div class="r"><span>Teal tint on ink</span><span>8.6:1 · AAA</span></div>
+      <div class="r"><span>Signal on ink</span><span>9.0:1 · AAA</span></div>
+      <div class="r"><span>Signal deep on white</span><span>5.9:1 · AA</span></div>
+      <div class="r"><span>Signal on white</span><span>2.1:1 · fails — never do this</span></div>
+      <div class="r"><span>Grey on white</span><span>4.8:1 · AA body text</span></div>
+    </div>
+    <p class="lead small" style="margin-top:16px">Bright amber is unreadable as text on white. On light grounds a match uses <strong>Signal deep</strong> for the text and a pale amber wash behind the row — never bright amber type.</p>
+  </section>
+
+  <section class="sec">
+    <p class="sec-no">05</p>
+    <h2>In use</h2>
+
+    <h3 style="margin-top:22px">Terminal — where the split is clearest</h3>
+    <div class="term">
+<pre><span class="p">[</span><span class="w">kahshe</span><span class="p">]</span> <span class="d">0.4.1</span>
+
+$ kahshe search 'src_ip = 10.4.2.9' --since 24h
+<span class="d">read</span>     2 manifests
+<span class="d">pruned</span>   412 files · 1.8 GB skipped
+<span class="s">hits</span>     <span class="w">147 rows in 3 files</span> <span class="d">(0.62s)</span></pre>
+    </div>
+    <p class="lead small" style="margin-top:12px">Teal brackets the tool's own name. Amber marks the one line that is a result. Everything the tool reports about its work stays grey.</p>
+
+    <h3 style="margin-top:32px">A results table on light ground</h3>
+    <div class="tbl">
+      <div class="row"><span>partition</span><span>rows</span></div>
+      <div class="row"><span>dt=2026-08-24</span><span>—</span></div>
+      <div class="row hit"><span>dt=2026-08-25</span><span>147 matched</span></div>
+      <div class="row"><span>dt=2026-08-26</span><span>—</span></div>
+    </div>
+
+    <h3 style="margin-top:32px">README</h3>
+    <div class="readme">
+      <svg class="lk s" viewBox="0 0 443.76 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="kahshe"><use href="#wm"/></svg>
+      <p class="lead small" style="margin:12px 0 0">Index and search for Iceberg tables. Open three files, not forty thousand.</p>
+      <div class="badges">
+        <span class="badge"><span class="a">build</span><span class="b">passing</span></span>
+        <span class="badge"><span class="a">license</span><span class="b">Apache-2.0</span></span>
+        <span class="badge"><span class="a">release</span><span class="b">v0.4.1</span></span>
+      </div>
+    </div>
+
+    <h3 style="margin-top:32px">Favicon and docs</h3>
+    <div class="browser">
+      <div class="bar"><span class="fav">k</span><span class="u">kahshe.dev/docs/indexing</span></div>
+      <div class="pg"><svg class="lk xs" viewBox="0 0 443.76 100" preserveAspectRatio="xMinYMid meet" role="img" aria-label="kahshe"><use href="#wm"/></svg>
+        <p style="margin:10px 0 0">Docs header pairs the wordmark at 17px with Plex Mono navigation at 13px.</p></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <p class="sec-no">06</p>
+    <h2>Tokens</h2>
+    <div class="code"><span class="c">/* kahshe — dual */</span>
+--kh-ink:          <span class="v">#0C1417</span>;
+--kh-primary:      <span class="v">#12727C</span>;  <span class="c">/* identity, structure */</span>
+--kh-primary-tint: <span class="v">#5FBFC7</span>;  <span class="c">/* dark grounds only */</span>
+--kh-signal:       <span class="v">#F0A62B</span>;  <span class="c">/* a match, dark grounds */</span>
+--kh-signal-deep:  <span class="v">#8A5A0F</span>;  <span class="c">/* a match, light grounds */</span>
+--kh-surface:      <span class="v">#F2F5F6</span>;
+--kh-line:         <span class="v">#E0E7E8</span>;
+--kh-grey:         <span class="v">#647579</span>;
+--kh-wash:         <span class="v">#DCEFF1</span>;
+
+--kh-font-sans:    <span class="v">"IBM Plex Sans"</span>, Inter, system-ui, sans-serif;
+--kh-font-mono:    <span class="v">"IBM Plex Mono"</span>, "JetBrains Mono", ui-monospace, monospace;
+--kh-tracking-wordmark: <span class="v">-0.03em</span>;</div>
+    <p class="lead small" style="margin-top:14px">Also shipped as <code style="font-family:var(--mono)">tokens.css</code> and <code style="font-family:var(--mono)">tokens.json</code> in the asset pack.</p>
+  </section>
+
+  <section class="sec">
+    <p class="sec-no">07</p>
+    <h2>Attribution and naming</h2>
+    <div class="blocks">
+      <div class="block"><h3>Iceberg is not yours to use</h3><p>Write "Kahshe for Apache Iceberg". Never "Kahshe Iceberg" or "Iceberg Kahshe", and never place the Iceberg logo in or beside the mark.</p></div>
+      <div class="block"><h3>Required footer line</h3><p>Apache, Apache Iceberg, and Iceberg are trademarks of the Apache Software Foundation.</p></div>
+      <div class="block"><h3>Fonts</h3><p>IBM Plex Sans and Mono, SIL Open Font License 1.1. Ship the licence with any asset that embeds them.</p></div>
+    </div>
+    <p class="lead small" style="margin-top:20px">Before any commercial use, run a knockout search on the wordmark in USPTO and CIPO, classes 9 and 42. This is design guidance, not legal advice.</p>
+  </section>
+
+  <footer>
+    <span>Kahshe — Brand Document v1.2</span>
+    <span>Mark, type, two-accent colour, application standards</span>
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# The built-in scanners, declared the way any other implementation is. Order here does not
+# decide the pass's order — Scanners.BUILT_INS does.
+io.kahshe.watch.scan.RuleScanner
+io.kahshe.watch.scan.WindowScanner
