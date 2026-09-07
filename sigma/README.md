@@ -79,7 +79,7 @@ one. Numbers still convert to `equals`, because a number has no case.
 ## Tests
 
 ```sh
-pytest tests
+pytest tests          # 25 tests
 ```
 
 The suite writes every converted rule to `tests/generated/`, which a **Java** test

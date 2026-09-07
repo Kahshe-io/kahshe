@@ -7,7 +7,7 @@ over environment variables where both apply, within the ceiling rule below.
 Most of these have working defaults. The four settings that are decisions rather than tuning —
 TLS, `KAHSHE_TABLE_CACHE_TTL_MS` above one replica, `KAHSHE_INDEX_ROOT` under
 `remove_orphan_files`, and `KAHSHE_SERVE_DELETE_BEARING` with Trino — are called out in the
-[README's deployment section](../README.md#deploying-it).
+[README's deployment section](../README.md#deploying).
 
 ---
 

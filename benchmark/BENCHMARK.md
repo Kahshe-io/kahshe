@@ -1,4 +1,67 @@
-# kahshe vs OpenSearch — benchmark results (2026-08-25)
+# kahshe — benchmark results
+
+## Lab runs on public corpora (2026-09-02/03): httplogs and ClickBench
+
+Two independent runs, kept apart — not averaged, not combined — and every figure the animated
+scenes carry (the README's, and the full set under `docs/evidence/`) is also in the text here. Raw
+records, SQL and runners: [evidence/](evidence/); how each scene is drawn, and what it does not:
+[docs/evidence/](../docs/evidence/EVIDENCE-README.md).
+
+### Equality on a high-cardinality column — httplogs
+
+`SELECT count(*) FROM logs.httplogs WHERE clientip = '71.162.18.0'` — 2 rows in 247,249,096, across
+991 files and 1.31 GB. Spark 3.5.3 + Iceberg 1.11.0, `local[8]`, 10 GB driver, one job at a time,
+n=3.
+
+Provenance: the committed JSONL records are all Trino runs. The four httplogs arms are Spark, driven by `spark-needle.py` in evidence/, which prints per-query results to stdout that nothing captures — so their wall-clock ranges and the three copy sizes are transcribed from the run log rather than read back from a committed record.
+
+| arm | what it is | files read | wall clock |
+|---|---|---|---|
+| stock | the table as loaded | 991 of 991 | 6.6–11.5 s |
+| plain | Spark-written copy, no blooms | 991 of 991 | 18.4–20.5 s |
+| bloom | same copy, `write.parquet.bloom-filter-enabled.column.clientip=true`, fpp 0.01 | 991 of 991 | 11.3–12.4 s |
+| **kahshe** | same Spark, catalog URI swapped to kahshe | **2 of 991** | **0.34–0.44 s** warm, 2.8–3.8 s cold |
+
+**How to read the bloom arm.** Blooms are judged against `plain`, not `stock`: both Spark-written
+copies are bigger than the table they came from — 3.00 GB and 4.05 GB against 1.31 GB — so neither
+is comparable to the untouched table. Inside its own copy the bloom did real work, 18.4 s → 11.3 s,
+and that it still opens all 991 files is no defect in the measurement: a Parquet bloom prunes row
+groups *inside* a file, which cannot happen until the file is open. Those pages cost 1.05 GB, 35%
+added to that copy; kahshe's tiers on the original cost 12.1 MB — term 11,509,403 B (0.88% of the
+data, 1,149,519 terms), bloom 566,420 B (0.04%),
+[drawn here](../docs/evidence/httplogs-overhead.svg) — whose term tier merges in ~70 s on 12
+threads after a full read of the data, and the plan call is 17–18 ms warm, 320–540 ms cold. Warm:
+**15–34× faster than stock, 26–36× faster than the bloom arm, for about 1% of the storage.**
+
+### A predicate min/max pruning cannot touch — ClickBench
+
+`regexp_like(lower(URL), '(^|[^a-z0-9])offilialog([^a-z0-9]|$)')` — 6 rows in 100M ClickBench hits
+as shipped, unsorted on `URL`; Trino two nodes, arms alternated per round, a fresh pod per arm, the
+class overlay on the kahshe arm only. Nothing prunes a regexp, so all 1,000 files survive Iceberg's
+own pruning: the case with nothing to compare against rather than something slower. The term index
+takes it to **4 files**, scanning **6.8 MB rather than 2,440.1 MB** and 400,000 rows rather than
+99,997,497, for the same six rows — planning 24 → 30 ms, execution 8,180 → 3,000 ms on node 003
+([clickbench-kahshe.svg](../docs/evidence/clickbench-kahshe.svg)). About 2 s of each execution is
+Trino's per-query floor rather than scan time, so what moved is the scan portion: roughly
+6,180 → 1,000 ms. Node 003 is the conservative pair on every axis, not just the ratio: it supplies
+the lower stock baseline and the slower kahshe result. 001 ran 9,920 ms stock and 2,170 ms through
+kahshe — a 4.6× gap on execution against 003's 2.7×. Index cost on `URL`: term 0.84%, bloom 0.33%.
+
+### What these numbers do not say
+
+- **The httplogs byte and row figures are inferred**, from files × size; Spark's per-run input bytes
+  were not captured, so they are approximate and must not be quoted as measured. No
+  planning/execution split there either — Spark local mode gives none, Trino does.
+- **The gram tier's size was not recorded** for either column, and lookup bytes were not measured.
+  The term and bloom figures are the whole of what was measured.
+- **Confidence is low-n.** httplogs is single-node, n=3; ClickBench n=1 per node with three warm
+  re-runs on 003. Lab runs on the hardware described, not an installation serving traffic.
+
+---
+
+## kahshe vs OpenSearch on the local corpus (2026-08-25 series, newest update first)
+
+The updates stack newest-first over the v1 report at the bottom, each with its own raw file.
 
 ## SEARCH ARTIFACT v2 (per-file segments) — measured 2026-08-27, REMOVED 2026-08-28
 

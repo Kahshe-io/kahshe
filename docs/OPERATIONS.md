@@ -56,7 +56,7 @@ claim is not recorded either, so a later observation of the same snapshot retrie
 
 ## 2. The rest of the metrics
 
-A selection, not the whole set: `GET /metrics` on the admin port emits every series.
+A selection, not the whole set: `GET /metrics` on the admin port (8283) emits every series.
 
 ### What each index tier pruned
 
@@ -160,10 +160,14 @@ ordinary incremental one. Once tombstones pass a threshold a build renumbers the
 drops them, translating every bitmap in the same pass. The one visible consequence is on `_count`
 (see [ENDPOINTS.md](ENDPOINTS.md#3-_count)), never on pruning.
 
-**Rebuilds are triggered by observation, not by a schedule.** A commit through the proxy marks the
-index stale and the next `loadTable` triggers the rebuild. Changing `ngram`, `analyzer` or
-`max-token-length` changes an identity the index records, so the affected column rebuilds while
-the existing index keeps serving under its own rules.
+**Rebuilds are triggered by observation, not by a schedule.** Indexing is a table property
+(`kahshe.index`) kahshe observes in passing `loadTable` traffic, keeping the column current in the
+background: a commit through the proxy marks the index stale and the next `loadTable` triggers the
+rebuild. Every knob under that property resolves per column, then per table, then from the
+deployment default, and all are cost dials
+([CONFIGURATION.md](CONFIGURATION.md#per-column-and-per-table-tuning)). Changing `ngram`,
+`analyzer` or `max-token-length` changes an identity the index records, so the affected column
+rebuilds while the existing index keeps serving under its own rules.
 
 **`remove_orphan_files` will delete your indexes** if `KAHSHE_INDEX_ROOT` is left inside the table
 location, because index files are not referenced by table metadata. This is the one maintenance
@@ -173,6 +177,11 @@ interaction that costs something you have to rebuild rather than something that 
 
 ## 4. Deployment shapes
 
+Point engines at `http://kahshe:8282` instead of the catalog — `https://` once TLS is configured —
+and that is the whole integration. Four settings are decisions rather than tuning, each in the
+section that owns it: TLS (§6), the table cache TTL above one replica (below), the index root under
+`remove_orphan_files` (§3), and delete-bearing snapshots with Trino (§5).
+
 One image, roles by configuration. The chart renders all of these —
 [helm/kahshe/README.md](../helm/kahshe/README.md) — and
 [ARCHITECTURE.md §10](ARCHITECTURE.md#10-deployment-shapes) covers why the roles split where they
@@ -180,10 +189,14 @@ do.
 
 | shape | what runs | when |
 |---|---|---|
-| **Single process** (`KAHSHE_MODE=both`, default) | data plane, admin, indexer, and the watcher when rules are configured | small installs; this is the quickstart |
+| **Single process** (`KAHSHE_MODE=both`, default) | data plane, admin, indexer, and the watcher when rules are configured | small installs; this is the [quickstart](../README.md#quickstart) |
 | **Split** | N proxy replicas with `KAHSHE_INDEXER=false` and `KAHSHE_TABLE_CACHE_TTL_MS=0`, plus one `KAHSHE_MODE=watch` instance that discovers, builds and alerts | serving latency should never sit behind a build |
 | **Detection split from building** | a `KAHSHE_MODE=watch` instance with `KAHSHE_INDEXER=false` that row-scans and delivers, while builds run anywhere else | builds are a Job, a CLI run, or another implementation |
 | **Indexer fleet** | N replicas with `KAHSHE_INDEX_FLEET=true`, each taking a column's build lease, plus one watch instance that scans and delivers | one process cannot keep up |
+
+Above one replica, in any shape, `KAHSHE_TABLE_CACHE_TTL_MS=0` is required: the record of which
+snapshot this proxy last forwarded is per-process, so a replica that did not serve a table's
+`loadTable` could otherwise plan from a view of unknown age.
 
 Two consequences of any shape where the proxy does not build:
 
@@ -209,7 +222,7 @@ the signal that it is too small.
 | the index is stale, partial, unreadable, or was never built | every file that cannot be ruled out is kept — slower, never wrong |
 | a tier is off, or coverage narrowed to a window | the same rows, more files scanned |
 | the response rewrite fails | passthrough unmodified; the client plans locally |
-| the snapshot carries delete files | server planning is neither advertised nor served; the client plans locally |
+| the snapshot carries delete files | server planning is neither advertised nor served; the client plans locally. `KAHSHE_SERVE_DELETE_BEARING=true` lifts that refusal — leave it `false` while any Trino reads through this proxy: Trino 483 unboxes a sequence number the REST scan-task format drops and throws, while stock iceberg-java readers are correct (measured, both delete kinds) |
 | the backing catalog is unreachable | `/readyz` goes false within seconds, on its own port and executor |
 | the kahshe process is down | catalog calls fail. kahshe is in the metadata path, so front it the way you front the catalog itself. There is nothing to drain first: no plan store, no paging, no cross-request continuation, no state shared between replicas |
 
@@ -219,9 +232,11 @@ the signal that it is too small.
 
 - **Passthrough is unchanged**: the backing catalog authorizes exactly as it does today.
 - **Served endpoints re-check the caller**: for `/plan*` and `/_count` the caller's own bearer token
-  must load the table from the backing catalog, verified per request, verdict cached by token hash —
-  never the raw token — for `KAHSHE_AUTH_CACHE_TTL_MS`, capped at token expiry, with denials
-  negative-cached briefly. The backend stays the sole authority for that check.
+  must load the table from the backing catalog, verified per request; the backend stays the sole
+  authority for that check. The verdict is cached by token hash — never the raw token — for
+  `KAHSHE_AUTH_CACHE_TTL_MS` (default 60 s, capped at the token's own expiry when it is a readable
+  JWT), so revocation lags by at most that TTL; a denial is cached for 2 s so a bad-token storm
+  does not amplify into the backend.
 - **Granularity is a deployment choice.** By default the gate proves the caller can load the table and
   planning then runs under kahshe's service credential, so sub-table controls (column masking, row
   filters) are not honored on served endpoints. `KAHSHE_PLANNING_IDENTITY=caller` plans and counts

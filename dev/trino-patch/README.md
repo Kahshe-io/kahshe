@@ -8,6 +8,8 @@ asked for server-side planning — which is exactly what kahshe's
 `scan-planning-mode=server` injection asks for. This directory holds the class
 overlay that fixes it for the lab image.
 
+Six tests cover the overlay; `./gradlew check` runs them under Trino's own toolchain.
+
 **Two overlaid classes, not one.** `TrinoRestCatalog.java` is the one described
 above: it preserves the `RESTTable` scan, so Trino plans server-side at all.
 `IcebergSplitSource.java` is the second half — it recognises the exact

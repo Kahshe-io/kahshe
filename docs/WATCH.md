@@ -6,8 +6,9 @@ returns row content: every alert carries the SQL an operator runs in their own e
 own authorization, to see the rows.
 
 A `KAHSHE_MODE=watch` instance with `KAHSHE_INDEXER=false` needs no proxy, no indexer and no
-index — point it at a catalog and a rules file. With `KAHSHE_CATALOG_IMPL` that catalog need not
-be REST, so this works on Glue, Hive and JDBC as well as on Polaris, Nessie, Unity and Lakekeeper.
+index — point it at a catalog and a rules file. `KAHSHE_CATALOG_IMPL` loads any Iceberg `Catalog`
+by class name, so that catalog need not be REST: this works on Glue, Hive and JDBC as well as on
+Polaris, Nessie, Unity and Lakekeeper.
 
 ---
 
@@ -54,8 +55,8 @@ rules:
   # all-of over two is the row scan's), and by the row scan either way.
   - id: error-burst
     title: Error burst in event logs
-    severity: high            # info|low|medium|high|critical
-    prefix: lakehouse         # catalog prefix, as engines address it
+    severity: high            # info|low|medium|high|critical; required
+    prefix: lakehouse         # catalog prefix, as engines address it; required
     table: logs.events        # ns.table, no wildcards
     column: msg
     match: [error, exception] # single analyzer tokens — exact per-file counts
@@ -117,11 +118,11 @@ which the loader reads through the same path.
 
 **Loading is fail-open per rule.** That refusal is of the one rule, not the file: a WARN naming it
 and the reason, `kahshe_watch_rules_skipped_total` incremented, and the rest of the file loads. A
-bad `severity`, a malformed `table`, an unknown field, an `re` that will not compile and an id
-repeating an earlier rule's (first occurrence wins) all take that path, so a deploy can lose one
-rule and keep watching. Only a file that will not parse at all is refused whole, and then the
-previous rule set keeps serving. Alert on `kahshe_watch_rules_skipped_total`, or compare
-`kahshe_watch_rules_loaded` against the rule count you shipped.
+missing `id` or `prefix`, a bad `severity`, a malformed `table`, an unknown field, an `re` that
+will not compile and an id repeating an earlier rule's (first occurrence wins) all take that path,
+so a deploy can lose one rule and keep watching. Only a file that will not parse at all is refused
+whole, and then the previous rule set keeps serving. Alert on `kahshe_watch_rules_skipped_total`,
+or compare `kahshe_watch_rules_loaded` against the rule count you shipped.
 
 ---
 
@@ -358,11 +359,12 @@ An existing Sigma library runs against a kahshe table without being rewritten:
 selections, the condition expression, the field modifiers — and an `event_count` correlation into
 a window rule.
 
-What it will not do is drop a clause. Every construct kahshe has no operator for **raises**,
-naming itself and what to write instead, because a rule that converts with a clause silently
-dropped loads clean, reviews as correct, and fires on the wrong rows. The conversion is gated by a
-round trip — the backend's tests write their output and kahshe's own loader reads it back — which
-is what catches YAML kahshe would refuse.
+What it will not do is drop a clause. Every construct kahshe has no operator for is **refused**:
+the conversion raises `KahsheConversionError` naming the construct and, where one exists, what to
+write instead, because a rule that converts with a clause silently dropped loads clean, reviews as
+correct, and fires on the wrong rows. The conversion is gated by a round trip — the backend's tests
+write their output and kahshe's own loader reads it back — which is what catches YAML kahshe would
+refuse.
 
 ---
 

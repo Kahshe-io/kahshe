@@ -21,18 +21,26 @@ engines ──REST──▶ kahshe ──▶ your existing catalog
                        files using Parquet sidecar indexes
 ```
 
-Iceberg's REST specification includes server-side scan planning: the engine sends its filter, the
-catalog returns the list of files to scan. kahshe implements those endpoints, advertises them in
-`/v1/config`, and injects `scan-planning-mode=server` into `LoadTableResponse`, so stock Iceberg
-1.11+ clients switch over with no configuration. Everything kahshe does not serve itself is
-forwarded to the real catalog unchanged.
+An engine sends its filter, the catalog answers with the list of files to scan. Iceberg's min/max
+statistics prune that list when the predicate has bounds — and cannot touch `LIKE '%needle%'`, a
+regexp, or a value whose range every file spans. Those queries read the whole table.
+
+Iceberg's REST specification already has the hook: server-side scan planning (`planTableScan`).
+kahshe implements those endpoints, advertises them in `/v1/config`, and injects
+`scan-planning-mode=server` into `LoadTableResponse`, so stock Iceberg 1.11+ clients switch over
+with no configuration. Planning consults three Parquet sidecar tiers — character-gram blooms, an
+exact gram layer, a term dictionary (section 5) — and returns only the files that can match.
+Everything kahshe does not serve itself is forwarded to the real catalog unchanged. The lineage is
+ClickHouse-style data skipping (`ngrambf_v1`) brought to open Iceberg tables;
+[diagrams/](diagrams/DIAGRAMS-README.md) draws it on a ten-file table.
 
 **kahshe returns file references. It never returns rows and never reads a data file on any serving
 path.** There is no ranking, no scoring, no row retrieval. Pruning is the entire product.
 
 Indexes are ordinary Parquet files living beside the data in the same object store, keyed by
 Iceberg **field id** and never by column name. They are rebuildable from the table at any time, so
-they are cache, not truth. A table opts in with a property:
+they are cache, not truth. A
+table opts in with a property:
 
 ```sql
 ALTER TABLE logs.events SET PROPERTIES ('kahshe.index' = 'msg');
@@ -40,6 +48,11 @@ ALTER TABLE logs.events SET PROPERTIES ('kahshe.index' = 'msg');
 
 That is the entire configuration. There is no index DDL, no index service, no new table format,
 and nothing for the engine to know about.
+
+Removal is the same size. Point the catalog URI back at your catalog and that is the whole of it:
+no metadata to unwind, no format to convert, no data to migrate, no engine change to revert because
+there never was one. What is left is an `_index` directory of Parquet files your table metadata
+never referenced and an inert `kahshe.index` property.
 
 ---
 
@@ -53,7 +66,8 @@ light.
 
 Two error directions, and they are not symmetric:
 
-- **False positive** — keeping a file that turns out not to match. It costs one scan. This happens
+- **False positive** — keeping a file that turns out not to match. It costs one scan and no rows:
+  the engine re-applies its own filter to what it reads, as in any Iceberg scan. This happens
   constantly and is perfectly acceptable. Do not "fix" it at any risk to the other direction.
 - **False negative** — pruning a file that *does* match. It silently deletes rows from a user's
   query result. There is no exception, no error, and no metric when it happens. This is the one
@@ -165,7 +179,10 @@ apart.
 **Advertisement.** `Mutations` rewrites two responses: `/v1/config` to advertise the plan
 endpoints, and `LoadTableResponse` to set `scan-planning-mode=server`. That pair is why a stock
 client flips to server-side planning with zero configuration — the client is following the spec,
-not a kahshe extension.
+not a kahshe extension. Both rewrites fail open: a response that cannot be rewritten passes through
+unmodified, so the client sees its catalog and plans locally, and
+`kahshe_response_rewrite_failures_total` counts it — the only other symptom would be queries that
+stop getting faster.
 
 **Filter extraction.** The engine's filter arrives as an ordinary Iceberg expression. Before
 planning, `ContainsExtractor` pulls out the predicates only kahshe can answer — `contains`,
@@ -175,14 +192,19 @@ Iceberg's own statistics pruning. Extensions are accepted in **conjunctive posit
 `OR` or `NOT` they are a 400, never a silent pass, because a silently dropped predicate is a
 correctness question dressed as a convenience.
 
-**Pruning.** `IndexPruner` is the read path. For each hint it consults the tiers that can answer
-it and produces the set of files to keep. Anything it cannot answer — an unreadable leaf, a file
-outside the index's coverage, a tier that is not built — resolves to *keep*.
+**Pruning.** `IndexPruner` is the read path. It receives the file list after Iceberg's own
+partition and min/max pruning has run on it, so a query whose whole predicate is one day of a
+partitioned table gains nothing from the tiers, and a full scan has nothing to prune. For each hint
+it consults the tiers that can answer it and produces the set of files to keep. Anything it cannot
+answer — an unreadable leaf, a file outside the index's coverage, a tier that is not built —
+resolves to *keep*.
 
 **Planning.** `PlanService` assembles the surviving files into `file-scan-tasks`, caches plans,
 and records metrics. It also declines to serve server-side plans for snapshots that carry delete
-files unless explicitly opted in (`KAHSHE_SERVE_DELETE_BEARING`); the client then plans for
-itself, which is correct and merely slower.
+files unless explicitly opted in (`KAHSHE_SERVE_DELETE_BEARING`), and `Mutations` withholds
+`scan-planning-mode=server` from the same snapshots under the same flag — so on a delete-bearing
+snapshot server planning is neither advertised nor served, and the client plans for itself, which
+is correct and merely slower.
 
 **Counting.** `CountRoutes` answers `/_count` from the aggregate term tier — exact token counts by
 term or by prefix. It **refuses rather than approximates**: deletes present, coverage stale, a
@@ -190,10 +212,12 @@ multi-token value, or any data file having left the table since the index was bu
 refusal rather than a number that is nearly right. Pruning is unaffected by that last case,
 because pruning only asks *which* files hold a term, never how many times.
 
-**Admin.** `AdminHandler` serves `/healthz`, `/readyz` and `/metrics` on a separate port. Its
-backend probe runs off the request thread and must stay off it: the handler runs on a
-single-threaded executor, and a probe on the request thread turns a slow backend into an
-unanswerable health check.
+**Admin.** `AdminHandler` serves `/healthz`, `/readyz` and `/metrics` on a separate port with its
+own executor, so probes answer while the data plane is saturated. `/readyz` reports the last
+verdict of a backend probe that re-observes the backing catalog every 5 s, so an unreachable
+catalog turns it false within seconds. That probe runs off the request thread and must stay off
+it: the handler runs on a single-threaded executor, and a probe on the request thread turns a slow
+backend into an unanswerable health check.
 
 ---
 
@@ -267,6 +291,14 @@ back to the blooms — probabilistic, slower, still correct. There is no equival
 term aggregate that is missing terms, which is why a term build that cannot complete **fails
 loudly** instead of shipping something partial: a dictionary missing a term prunes exactly the
 files that contain it.
+
+Identifier-dense text defeats the gram tiers outright: there are only 4,096 possible hexadecimal
+trigrams, so essentially every file of hex trace ids holds all of them. On a lab corpus of 48 GB
+and 2.1 billion rows of that shape, `contains` kept **220 of 220 files** for the most selective
+query it can pose — a run predating the evidence records in the README's
+[measured results](../README.md#measured), so read it as the reason the term dictionary is not
+optional for such a workload rather than as a headline figure. That is a limit of the approach,
+not of this implementation; the build counts those files on `kahshe_gram_saturated_files_total`.
 
 ### Coverage is the join key
 
@@ -557,13 +589,21 @@ Because the watcher needs only tables and never the REST passthrough, it can loa
 by design — it *is* a REST catalog, and forwards everything it does not serve — so that setting is
 ignored with a warning in the proxy roles rather than half-working.
 
+Replicas share nothing. The plan cache is a per-process memo, not plan state: no plan store, no
+paging, no cross-request continuation, so there is nothing to drain before a process goes away.
+The blast radius is the other thing: a kahshe process that is down fails catalog calls, because
+kahshe is in the metadata path — front it the way you front the catalog itself. Adoption is the one
+table property plus the handful of decisions in the README's
+[deploying section](../README.md#deploying) — TLS, the table cache TTL above one replica, and where
+the index root lives.
+
 ---
 
 ## Further reading
 
 - [FORMAT.md](FORMAT.md) — the index format, normatively
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — toolchain, the gate, testing discipline, conventions
-- [../README.md](../README.md) — what kahshe is, the invariant, the quickstart, the measured results
+- [../README.md](../README.md) — the front page: what it does, the quickstart, compatibility, the measured results, deploying
 - [CONFIGURATION.md](CONFIGURATION.md) — every `KAHSHE_*` variable and `kahshe.*` table property
 - [ENDPOINTS.md](ENDPOINTS.md) — the served HTTP surface, the filter extensions, `_count`
 - [OPERATIONS.md](OPERATIONS.md) — metrics, staleness alerting, index lifecycle, security posture
