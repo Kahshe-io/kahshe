@@ -53,7 +53,7 @@ data already is. No ingest pipeline. Every alert carries the SQL to see the rows
 ```bash
 git clone https://github.com/Kahshe-io/kahshe.git && cd kahshe
 docker compose up -d --build      # Polaris + kahshe; no published image yet, so 5–10 min the first time
-docker compose run --rm seed      # four files, msg indexed
+docker compose run --rm seed      # creates logs.events with 'kahshe.index' = 'msg', four files
 ```
 
 ```
@@ -77,9 +77,24 @@ Ports 8282 and 8283 must be free — a local `bin/kahshe` holds both. `docker co
 | **Merge-on-read tables** | `KAHSHE_SERVE_DELETE_BEARING=true` | pruned planning for Spark and Flink; leave off if Trino reads through the proxy |
 | **AWS Glue, S3 Tables** | — | not yet: SigV4 |
 
-Indexable: strings, integers, decimals, UUIDs, binary, lists, maps.
-`ALTER TABLE t SET PROPERTIES ('kahshe.index' = 'msg')` — that is the whole setup.
 Every other engine passes through unchanged; the full matrix is in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+
+## Configuring the index
+
+Table properties, nothing else — no DDL, no index service. kahshe sees them on `loadTable` and
+builds in the background:
+
+```sql
+ALTER TABLE logs.events SET PROPERTIES (
+  'kahshe.index'                  = 'msg,clientip',   -- the columns; this line alone is enough
+  'kahshe.index.clientip.analyzer' = 'value',         -- whole values, not tokens: IPs, ids, UUIDs
+  'kahshe.index.msg.ngram'         = '4'              -- gram size, when 3 saturates on dense text
+)
+```
+
+Strings, integers, decimals, UUIDs, binary, lists and maps index. Every knob resolves per column,
+then per table, then from the deployment default, and all are cost dials with no correctness
+cliff: [docs/CONFIGURATION.md](docs/CONFIGURATION.md#1-table-properties).
 
 <a id="measured"></a>
 ## Measured
