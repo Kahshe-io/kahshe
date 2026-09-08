@@ -34,13 +34,27 @@ then declares coverage of every file while holding the wrong tokens, and a probe
 the files that match — a wrong answer, with nothing to observe. An implementation that cannot
 resolve a file by id or by name must refuse to index it rather than fall through to position.
 
-**kahshe does not yet enforce that refusal.** Stated here because this document otherwise describes
-the artifact as the shipping code writes and reads it, and this is a rule on implementations that
-the shipping code does not yet meet. Both read sites supply the mapping when the table declares one
-(`DataFileIds`, `IndexBuilder.readFile`, `ScanPass.scanFile`), and a mapping that exists but will
-not parse is refused loudly; a file carrying neither field ids nor a mapping still falls through to
-position. Refusing it needs the Parquet footer read before the projection
-(`ParquetSchemaUtil.hasIds`), which neither read site does today.
+**kahshe enforces that refusal.** Both read sites supply the mapping when the table declares one
+(`DataFileIds`, `IndexBuilder.readFile`, `ScanPass.scanFile`), a mapping that exists but will not
+parse is refused loudly, and a file carrying neither field ids nor a mapping is refused before it
+is read (`DataFileIds.requireResolvable`, which reads the Parquet footer and requires a field id
+on every primitive leaf). The footer is read only when the table declares no mapping, so a table
+that declares one pays nothing.
+
+The leaf walk is deliberately stricter than Iceberg's own `ParquetSchemaUtil.hasIds`, which is an
+ANY test: one id anywhere makes a whole file look resolvable, so a file whose groups are
+identified and whose leaves are not passes it. Iceberg does not fail on such a file either — it
+drops the unidentified column from the read schema, which reads as null, contributes no terms, and
+leaves the file covered while holding none of its values, so a probe prunes exactly the files that
+match. Only leaves are required to carry ids: Parquet's three-level list and map encodings put a
+synthetic repeated group between a field and its element and Iceberg does not identify those, so
+requiring ids on groups would refuse every correct table with a list or a map in it.
+
+The refusal fails the build rather than skipping the file. Skipping is the better behaviour and is
+not built: a skipped file must land outside coverage (§5.3) so a pruner keeps it, and a build
+assigns ordinals by position in its wave before it reads, so leaving one out is a change to
+coverage allocation rather than to the check. A failed build leaves the previous generation
+serving and the table correct, which is the safe direction until that exists.
 
 ## 1. Layout
 
@@ -819,14 +833,18 @@ rather than a kahshe argument.
    reserve names for expected future types was raised on the 2026-07-20 agenda and is unanswered
    in the notes. Reserving a name costs nothing and prevents a collision.
 2. **Admit partial coverage** — relax the "exactly the live rows" rule (`index-spec:199`) to allow
-   a declared coverage set, with files outside it always kept. No prior art exists anywhere in the
-   project, which is itself the finding: the nearest the record comes is an open question about
-   whether deletes may be deferred to the next full rebuild, leaving the index with stale entries.
-   A coverage set is not usable without a matching reader rule. A reader must check coverage before
+   a declared coverage set, with files outside it always kept. A coverage set is not usable without
+   a matching reader rule. A reader must check coverage before
    trusting the index to eliminate anything; absent that rule, "absent from the index" reads as
    "prune", which drops rows with no error and no metric. The draft has exactly one reader
    obligation today, about unknown index types (`index-spec:93-94`), and no place to put a second.
-   The cost is real and lands on readers; we already pay it (§7, rule 1).
+
+   What makes the relaxation tractable is what an index returns. An index that eliminates files
+   stays correct under partial coverage, because a file it does not know is simply kept and the
+   engine reads it as it would have anyway. An index that returns rows does not, because a row it
+   does not know is a wrong answer rather than a slow one. So the exactness constraint belongs to
+   the index type rather than to every index snapshot. The cost is real and lands on readers; we
+   already pay it (§7, rule 1).
 3. **A portable spelling for containment — largely already answered.** Predicates in the merged
    expressions spec are a closed set with no containment operation and no extension point, but a
    boolean function compared to a literal *is* a valid predicate: the spec's own example is that

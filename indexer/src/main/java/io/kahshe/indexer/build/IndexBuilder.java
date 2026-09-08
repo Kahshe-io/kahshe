@@ -1327,9 +1327,12 @@ public final class IndexBuilder {
     // POSITION, which indexes one column's values under another's id whenever a schema has ever
     // dropped or reordered a column. See DataFileIds.
     org.apache.iceberg.mapping.NameMapping mapping = io.kahshe.format.DataFileIds.mappingOf(table);
+    org.apache.iceberg.io.InputFile input =
+        IndexPaths.dataIo(table, config.format()).newInputFile(path);
+    // And a file carrying neither ids nor a mapping is refused rather than read positionally.
+    io.kahshe.format.DataFileIds.requireResolvable(input, mapping);
     try (CloseableIterable<Record> records =
-        io.kahshe.format.DataFileIds.withMapping(
-                Parquet.read(IndexPaths.dataIo(table, config.format()).newInputFile(path)), mapping)
+        io.kahshe.format.DataFileIds.withMapping(Parquet.read(input), mapping)
             .project(projection)
             .createReaderFunc(fs -> GenericParquetReaders.buildReader(projection, fs))
             .build()) {

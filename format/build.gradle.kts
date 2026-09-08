@@ -22,12 +22,20 @@ dependencies {
     implementation("org.apache.iceberg:iceberg-data:1.11.0")
     implementation("org.apache.iceberg:iceberg-parquet:1.11.0")
     implementation("org.apache.parquet:parquet-column:1.17.1")
+    // Already on the runtime classpath through iceberg-parquet; declared so DataFileIds can
+    // read a footer at compile time. Iceberg's own adapter for this (ParquetIO) is
+    // package-private, which is why the InputFile adapter is written out there. Adds no jar.
+    implementation("org.apache.parquet:parquet-hadoop:1.17.1")
     implementation("org.roaringbitmap:RoaringBitmap:1.3.0")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.21.3")
     implementation("org.slf4j:slf4j-api:2.0.13")
     runtimeOnly("com.github.luben:zstd-jni:1.5.6-4")
     // Test-only, and the one permitted backward edge: the round-trip tests build a real index
     // through the indexer module.
+    // Test only, and only so javac can resolve ExampleParquetWriter.builder's overloads --
+    // the test calls the OutputFile one and never a Hadoop Path. Already on the test runtime
+    // classpath through the runtimeOnly pair above, so this adds no jar and nothing to main.
+    testImplementation("org.apache.hadoop:hadoop-client-api:3.4.1")
     testImplementation(project(":indexer"))
     testImplementation(testFixtures(project(":indexer")))
     testImplementation(testFixtures(project(":common")))
