@@ -12,6 +12,12 @@ import io.kahshe.proxy.plan.PlanService;
  *     {@code PlanService} together, because gating only one half leaves it inert.
  * @param tableCacheTtlMs how long a loaded table may be reused before it is re-read; 0 disables
  *     table caching entirely, which is what a multi-replica deployment needs
+ * @param advertiseServerMode which tables are told to plan server-side: {@code all} (the
+ *     default), {@code indexed} (only a table declaring {@code kahshe.index}) or {@code none}.
+ *     A table not advertised to plans locally — correct, and it reads the same files, but it
+ *     fetches the manifests itself and gets no index pruning. Narrow it when a client cannot do
+ *     something while a table says planning MUST be server-side: DuckDB, for one, cannot run the
+ *     first DELETE or UPDATE against such a table.
  * @param planStats per-file column statistics in plan responses: {@code strip} (the default: none
  *     leave the proxy) or {@code requested} (those of the columns a request names in
  *     {@code stats-fields}). A table overrides it with {@code kahshe.plan-stats}. Disclosure
@@ -28,6 +34,7 @@ public record ProxyConfig(
     String planningIdentity,
     String backendWarehouse,
     boolean serveDeleteBearing,
+    String advertiseServerMode,
     long tableCacheTtlMs,
     String planStats,
     /** PEM CA bundle to trust the backend's certificate; empty for the JVM default. */

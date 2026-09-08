@@ -28,6 +28,7 @@ public final class TestConfigs {
     return new ProxyConfig(
         "http://localhost:0", "", "", true, 0, 1_000, 1 << 20, "service", "",
         false, // serveDeleteBearing: the suite exercises the guard, not the escape hatch
+        "all", // advertiseServerMode: the production default; MutationsTest varies it
         10_000L, // tableCacheTtlMs: the production default; TableCacheTest varies it
         "strip", // planStats: the default; PlanStatsOptionTest varies it
         ""); // backendCa: the JVM default trust store, as an unconfigured deployment uses

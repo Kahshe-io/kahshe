@@ -125,10 +125,20 @@ public final class Mutations {
    * The rewritten body and whether server planning was actually advertised in it. The caller needs
    * the second half to log truthfully, since a delete-bearing table is passed through un-injected.
    */
-  public record ServerPlanning(byte[] body, boolean injected) {}
+  public record ServerPlanning(byte[] body, boolean injected, String declinedBecause) {}
+
+  /** {@code KAHSHE_ADVERTISE_SERVER_MODE}: which tables are told to plan server-side. */
+  public static final String ADVERTISE_ALL = "all";
+
+  public static final String ADVERTISE_INDEXED = "indexed";
+  public static final String ADVERTISE_NONE = "none";
 
   public static ServerPlanning injectServerPlanning(byte[] body) {
     return injectServerPlanning(body, false);
+  }
+
+  public static ServerPlanning injectServerPlanning(byte[] body, boolean serveDeleteBearing) {
+    return injectServerPlanning(body, serveDeleteBearing, ADVERTISE_ALL);
   }
 
   /**
@@ -143,12 +153,26 @@ public final class Mutations {
    *     provably delete-free. Must move together with {@code PlanService}'s guard on the same flag:
    *     gating only the serving half leaves the flag inert, because a client never told to plan
    *     server-side never asks. Off by default.
+   * @param advertiseMode which tables to advertise to: {@code all} (the default), {@code indexed}
+   *     (only a table declaring {@code kahshe.index}) or {@code none}. Narrowing costs the
+   *     manifest-fetch saving on the tables it skips — they plan locally and read the same files —
+   *     and buys back whatever a client cannot do while a table says it MUST plan server-side.
+   *     A value this does not recognise is treated as {@code all}; {@code Kahshe} refuses one at
+   *     startup, so an unrecognised value here means a caller bypassed that check.
    */
-  public static ServerPlanning injectServerPlanning(byte[] body, boolean serveDeleteBearing) {
+  public static ServerPlanning injectServerPlanning(
+      byte[] body, boolean serveDeleteBearing, String advertiseMode) {
     try {
+      if (ADVERTISE_NONE.equalsIgnoreCase(advertiseMode)) {
+        return new ServerPlanning(body, false, "KAHSHE_ADVERTISE_SERVER_MODE=none");
+      }
       ObjectNode root = (ObjectNode) MAPPER.readTree(body);
+      if (ADVERTISE_INDEXED.equalsIgnoreCase(advertiseMode) && !declaresIndex(root.path("metadata"))) {
+        return new ServerPlanning(
+            body, false, "KAHSHE_ADVERTISE_SERVER_MODE=indexed and this table declares no kahshe.index");
+      }
       if (!serveDeleteBearing && !provablyDeleteFree(root.path("metadata"))) {
-        return new ServerPlanning(body, false);
+        return new ServerPlanning(body, false, "the snapshot is not provably delete-free");
       }
       ObjectNode config;
       if (root.has("config") && root.get("config").isObject()) {
@@ -157,12 +181,12 @@ public final class Mutations {
         config = root.putObject("config");
       }
       config.put("scan-planning-mode", "server");
-      return new ServerPlanning(MAPPER.writeValueAsBytes(root), true);
+      return new ServerPlanning(MAPPER.writeValueAsBytes(root), true, null);
     } catch (Exception e) {
       REWRITE_FAILURES.increment();
       LOG.warn("failed to rewrite LoadTableResponse; passing through unmodified. "
           + "scan-planning-mode=server is NOT injected, so this client will plan locally.", e);
-      return new ServerPlanning(body, false);
+      return new ServerPlanning(body, false, "the LoadTableResponse could not be rewritten");
     }
   }
 
@@ -215,6 +239,15 @@ public final class Mutations {
       // to the cached view it used before. The passthrough itself is unaffected.
       return -1;
     }
+  }
+
+  /**
+   * Whether the table declares index columns at all. Deliberately not {@link #indexPolicy}: that
+   * one also requires a current snapshot, because it drives indexing, and an empty table that
+   * declares {@code kahshe.index} is still a table the operator has opted in.
+   */
+  private static boolean declaresIndex(JsonNode metadata) {
+    return !metadata.path("properties").path("kahshe.index").asText("").isBlank();
   }
 
   private static boolean provablyDeleteFree(JsonNode metadata) {
