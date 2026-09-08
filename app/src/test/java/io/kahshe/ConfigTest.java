@@ -49,10 +49,38 @@ class ConfigTest {
     }
   }
 
+  /**
+   * The reader matches {@code caller} exactly, so any other spelling would plan as the service —
+   * one plan shared by every caller — and nothing would say so. A typo fails startup instead.
+   */
+  @Test
+  void aPlanningIdentityThatIsNotOneOfTheTwoIsRefused() {
+    assertEquals("caller", Kahshe.Config.checkPlanningIdentity("caller"));
+    assertEquals("service", Kahshe.Config.checkPlanningIdentity("service"));
+    for (String bad : new String[] {"Caller", "CALLER", "callr", "true", ""}) {
+      IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+          () -> Kahshe.Config.checkPlanningIdentity(bad), bad);
+      assertTrue(e.getMessage().startsWith("KAHSHE_PLANNING_IDENTITY"), e.getMessage());
+    }
+  }
+
   @Test
   void aTokenCapOfZeroIsNotUnlimited() {
     assertThrows(IllegalArgumentException.class, () -> Kahshe.Config.tokenLength(0));
     assertThrows(IllegalArgumentException.class, () -> Kahshe.Config.tokenLength(1L << 40));
     assertEquals(256, Kahshe.Config.tokenLength(256));
+  }
+
+  /**
+   * The production default is one string literal in {@code fromEnv}, read straight from the
+   * environment, and the fixture test cannot see it. Read through the real path: with the variable
+   * unset this must be the record's default, and with it set, whatever it says. Verified red with
+   * the fallback hardcoded back to {@code service}.
+   */
+  @Test
+  void theProductionDefaultIsCallerUnlessTheEnvironmentSaysOtherwise() {
+    String expected = System.getenv().getOrDefault(
+        "KAHSHE_PLANNING_IDENTITY", io.kahshe.proxy.ProxyConfig.DEFAULT_PLANNING_IDENTITY);
+    assertEquals(expected, Kahshe.Config.fromEnv().proxy().planningIdentity());
   }
 }

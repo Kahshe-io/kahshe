@@ -14,8 +14,11 @@ fullnameOverride: ""
 
 backend:
   url: "http://nessie:19120/iceberg"   # or Polaris: http://polaris:8181/api/catalog
-  # KAHSHE_CREDENTIAL comes from a Secret you create; it never lives in values. Empty for a
-  # backend that takes no credential.
+  # KAHSHE_CREDENTIAL comes from a Secret you create; it never lives in values. It is what a role
+  # that BUILDS reads tables with — the proxy with proxy.indexer, the indexer fleet, the watch pod —
+  # and what serving uses only under KAHSHE_PLANNING_IDENTITY=service. Served plans run as the
+  # caller by default, so a serving-only replica (proxy.indexer false, no watch rules) needs none.
+  # Empty for a backend that takes no credential.
   credentialSecret: kahshe-backend-credential
   credentialKey: credential
   scope: "PRINCIPAL_ROLE:ALL"
@@ -123,7 +126,10 @@ proxy:
     # build failing gracefully. Raise both together, keeping the volume larger.
     termBuildMaxSpillBytes: 12884901888   # 12 GiB
     scratchSizeLimit: 16Gi
-  # Extra KAHSHE_* settings by name, for example KAHSHE_PLAN_STATS: requested.
+  # Extra KAHSHE_* settings by name, for example KAHSHE_PLAN_STATS: requested, or
+  # KAHSHE_PLANNING_IDENTITY: service — the opt-in that plans every caller's request under
+  # KAHSHE_CREDENTIAL and shares one plan per table among them, for a single-tenant lake where
+  # table-level read means see-everything; the default plans as each caller.
   # An index root on a store other than S3 is configured here too: KAHSHE_INDEX_IO_IMPL names the
   # Iceberg FileIO class and KAHSHE_INDEX_IO_PROPERTIES its dotted properties, comma separated
   # (s3.endpoint=...,s3.path-style-access=true). Credentials still belong in extraEnv below.

@@ -75,8 +75,10 @@ reachability verdict and `/readyz` reads it. `AdminAuth` gates everything but th
 - **`PlanService`** — the plan itself: manifest scan, stats evaluation, index pruning, response
   assembly, and the plan cache.
 - **`CountRoutes`** — the `_count` extension.
-- **`BackendCatalogs`** — one Iceberg `RESTCatalog` client per path prefix (plus per-caller clients
-  under caller identity), the table caches, and the record of what has been forwarded to clients.
+- **`BackendCatalogs`** — the Iceberg `RESTCatalog` clients under both identities: one per (caller
+  token, prefix) for the served endpoints, the default, and one service client per path prefix for
+  builds and the `service` opt-in; the one place the identity is chosen (`forPlanning`); the table
+  caches; and the record of what has been forwarded to clients.
 - **`Mutations`** — the JSON rewrites applied to `/v1/config` and `loadTable` responses, and the
   readers for the `kahshe.index` property and the current snapshot id.
 - **`MutatedTables`** — reads the tables changed by the two spec endpoints that name them in the
@@ -117,10 +119,10 @@ own. A new index type joins the plan path by registering there; nothing in `prox
 | Variable | Effect |
 | --- | --- |
 | `KAHSHE_BACKEND` | Base URL of the catalog being fronted. |
-| `KAHSHE_BACKEND_CA` | PEM bundle of the CA that signed the backend's certificate, for a catalog behind a private authority. `BackendTls` gives it to both clients that reach the backend — Iceberg's `RESTCatalog` and the passthrough `Forwarder` — rather than to the JVM default trust store, which would also change how object storage is trusted. |
-| `KAHSHE_CREDENTIAL`, `KAHSHE_SCOPE` | OAuth2 client credentials for the service-identity catalog clients. |
+| `KAHSHE_BACKEND_CA` | PEM bundle of the CA that signed the backend's certificate, for a catalog behind a private authority. `BackendTls` gives it to every client that reaches the backend — Iceberg's `RESTCatalog` under both identities, service and caller, and the passthrough `Forwarder` — rather than to the JVM default trust store, which would also change how object storage is trusted. |
+| `KAHSHE_CREDENTIAL`, `KAHSHE_SCOPE` | OAuth2 client credentials for the service-identity catalog clients: what a build reads with, and served reads only under `service`. |
 | `KAHSHE_BACKEND_WAREHOUSE` | Overrides the guess that a path prefix names the warehouse. |
-| `KAHSHE_PLANNING_IDENTITY` | `service` (default) or `caller`. |
+| `KAHSHE_PLANNING_IDENTITY` | `caller` (default) or `service`: whose client reads a table's metadata on the served endpoints, and the identity the plan cache is keyed by. |
 | `KAHSHE_INJECT_PLANNING` | Whether `scan-planning-mode=server` is injected at all. |
 | `KAHSHE_SERVE_DELETE_BEARING` | Escape hatch for delete-bearing snapshots; off by default. |
 | `KAHSHE_PLAN_STATS` | `strip` (default) or `requested`. |
@@ -257,11 +259,14 @@ succeed. The backend remains the sole authority; kahshe only memoizes the verdic
 - Only 401, 403 and 404 are cached. A 5xx means the backend could not answer, not that the caller may
   not read the table.
 
-Planning identity is separately configurable. Under `service` the plan is built by a shared catalog
-client; under `caller` it is built by a client authenticated as the caller, so the backend's own
-authorization — including vended-credential scoping — applies to the manifest reads too. Caller
-catalogs are cached by token hash, and closed on eviction, because each one owns a pooled HTTP client
-and a token-refresh thread that would otherwise leak for the life of the process.
+The plan itself is then built as the caller by default (`KAHSHE_PLANNING_IDENTITY=caller`): a
+client authenticated as the caller reads the table and its manifests, so the backend's own
+authorization — including vended-credential scoping — applies to those reads too, and the plan
+cache is keyed by that client, so one caller's plan is never served to another. `service` is the
+opt-in, announced at startup: one shared client under `KAHSHE_CREDENTIAL` and one plan per table
+for every caller the gate admits. Caller catalogs are cached by token hash, and closed on eviction,
+because each one owns a pooled HTTP client and a token-refresh thread that would otherwise leak for
+the life of the process.
 
 ### The body cap is enforced on bytes read
 

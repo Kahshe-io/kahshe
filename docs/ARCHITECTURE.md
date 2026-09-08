@@ -173,8 +173,13 @@ every request: the key is a SHA-256 of the token plus the table, never the token
 `KAHSHE_AUTH_CACHE_TTL_MS` (default 60 s) or until the token's own JWT `exp`, whichever is sooner —
 so revocation lags by at most that TTL. A 401/403/404 is cached for 2 s so a bad-token storm does
 not amplify 1:1 into the backend; a 5xx is cached for nothing, because "the backend could not
-answer" is not an authorization answer. `BackendCatalogs` holds both identities and keeps them
-apart.
+answer" is not an authorization answer. The plan itself is then built, by default, through a
+catalog client authenticated as the caller (`KAHSHE_PLANNING_IDENTITY=caller`), chosen in one
+place — `BackendCatalogs.forPlanning` — and the plan cache is keyed by the identity that built it,
+so a plan read under one caller's credentials is never served to another; the gate is admission
+control in front of the per-token client cache rather than the authorization itself. `service`
+plans under kahshe's own credential once the gate has passed, one plan per table for every caller,
+and says so at startup. `BackendCatalogs` holds both identities and keeps them apart.
 
 **Advertisement.** `Mutations` rewrites two responses: `/v1/config` to advertise the plan
 endpoints, and `LoadTableResponse` to set `scan-planning-mode=server`. That pair is why a stock
@@ -591,7 +596,7 @@ Because the watcher needs only tables and never the REST passthrough, it can loa
 by design — it *is* a REST catalog, and forwards everything it does not serve — so that setting is
 ignored with a warning in the proxy roles rather than half-working.
 
-Replicas share nothing. The plan cache is a per-process memo, not plan state: no plan store, no
+Replicas share nothing. The plan cache is a per-process, per-caller memo, not plan state: no plan store, no
 paging, no cross-request continuation, so there is nothing to drain before a process goes away.
 The blast radius is the other thing: a kahshe process that is down fails catalog calls, because
 kahshe is in the metadata path — front it the way you front the catalog itself. Adoption is the one

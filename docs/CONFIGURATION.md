@@ -182,7 +182,7 @@ verification stays on.
 | `KAHSHE_PORT` | 8282 | listen port (data plane) |
 | `KAHSHE_ADMIN_PORT` | 8283 | health/readiness/metrics port, on its own executor, so probes stay alive during backend brownouts |
 | `KAHSHE_BACKEND` | `http://localhost:8181/api/catalog` | backing REST catalog base |
-| `KAHSHE_CREDENTIAL` | — | kahshe's own client-credentials for planning reads |
+| `KAHSHE_CREDENTIAL` | — | kahshe's own client-credentials: what index builds, the watch roles and the CLI read tables with, and what served reads use only under `KAHSHE_PLANNING_IDENTITY=service`. A serving-only replica (indexer off, no watch rules) under the default identity needs none |
 | `KAHSHE_SCOPE` | `PRINCIPAL_ROLE:ALL` | OAuth scope for the above |
 | `KAHSHE_BACKEND_WAREHOUSE` | — | backend warehouse name when the URL prefix is not one (Nessie's `branch\|warehouse` prefixes) |
 | `KAHSHE_BACKEND_TIMEOUT_MS` | 5000 | per-request timeout toward the backing catalog |
@@ -198,7 +198,7 @@ verification stays on.
 | var | default | purpose |
 |---|---|---|
 | `KAHSHE_AUTH_CACHE_TTL_MS` | 60000 | caller-authorization cache TTL, capped at token expiry |
-| `KAHSHE_PLANNING_IDENTITY` | service | `caller` plans and counts under the caller's own token, so backend authorization applies to every metadata read |
+| `KAHSHE_PLANNING_IDENTITY` | caller | whose credentials read a table's metadata on `/plan` and `_count`. `caller` plans under the bearer the request carried: the catalog's own rules for that principal apply to every metadata read and the plan cache is per caller, at the cost of one catalog client and one plan per distinct token. `service` plans under `KAHSHE_CREDENTIAL` once the caller's own token has loaded the table, one plan per table shared by every caller the backend admits, and startup says so at WARN — the opt-in for a single-tenant lake where table-level read means see-everything. Any other spelling is refused at startup naming the variable |
 | `KAHSHE_PLAN_STATS` | strip | whether a plan response carries per-file column statistics: `strip` returns none, `requested` returns those of the columns the request names in `stats-fields` and no others. A table overrides it with `kahshe.plan-stats`. Disclosure traded for scan speed: without them Trino decodes every page of every kept file, ~1.3 ms per file on the lab cluster, which only shows when nothing prunes |
 | `KAHSHE_ADMIN_TOKEN` | — | bearer the admin port requires on every path but `/healthz` and `/readyz`: a missing or wrong `Authorization: Bearer` answers 401 with a `WWW-Authenticate` challenge, before an unknown path is a 404, and counts on `kahshe_admin_auth_rejected_total`. Compared in constant time as SHA-256 digests, so the process holds a hash of the secret rather than the secret. Unset leaves the port open, as it always was, and startup says so at WARN. The probes stay open whatever is set: a kubelet cannot easily carry a bearer, and a health endpoint that needs a secret fails closed for the wrong reason |
 

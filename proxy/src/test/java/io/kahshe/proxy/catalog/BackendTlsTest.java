@@ -131,6 +131,28 @@ class BackendTlsTest {
     }
   }
 
+  /**
+   * Both identities' clients reach the backend the operator configured. The CA property landed on
+   * the service client's map and not the caller client's — two copies of one construction, one of
+   * them updated — so a backend behind a private authority passed the gate and then failed every
+   * plan under caller identity, now the default. Verified red with the caller client building its
+   * own map: the trust failure the test below asserts.
+   */
+  @Test
+  void aCallerCatalogReachesTheSelfSignedBackendTheServiceCatalogReaches() throws Exception {
+    try (Server server = Server.selfSigned(dir)) {
+      io.kahshe.proxy.catalog.BackendCatalogs catalogs =
+          new io.kahshe.proxy.catalog.BackendCatalogs(
+              io.kahshe.proxy.TestConfigs.with(
+                  io.kahshe.proxy.TestConfigs.proxyConfig(),
+                  Map.of(
+                      "backendBase", server.uri().toString().replaceAll("/$", ""),
+                      "backendCa", server.caPem.toString())));
+      assertNotNull(catalogs.forPrefix("lake"), "the service client is the control");
+      assertNotNull(catalogs.forCaller("lake", "Bearer t"));
+    }
+  }
+
   /** And without it, the same catalog cannot reach the same endpoint. */
   @Test
   void withoutThePropertyTheSameCatalogCannotReachIt() throws Exception {

@@ -21,6 +21,7 @@ import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import io.kahshe.proxy.TestConfigs;
+import io.kahshe.proxy.catalog.BackendCatalogs;
 
 /**
  * The plan request exactly as Trino 483 sends it for {@code col = 'x'}: an IN with one value,
@@ -56,7 +57,9 @@ class TrinoRequestShapeTest {
     PlanTableScanRequest request = PlanTableScanRequestParser.fromJson(extraction.cleanedJson());
     PlanService service = new PlanService(metrics, new TermIndex(config.format(), metrics), TestConfigs.proxyConfig(), config.format());
 
-    Set<String> kept = service.plan(catalog, ident, request, extraction.hints()).fileScanTasks().stream()
+    Set<String> kept = service
+        .plan(new BackendCatalogs.PlanningCatalog("service|test", catalog), ident, request, extraction.hints(), null)
+        .fileScanTasks().stream()
         .map(t -> t.file().location()).collect(Collectors.toSet());
     assertEquals(Set.of(f1), kept, "Trino's single-value IN is an equality on the whole value: one file");
   }

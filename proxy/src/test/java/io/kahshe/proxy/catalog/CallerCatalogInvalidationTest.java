@@ -23,8 +23,8 @@ class CallerCatalogInvalidationTest {
     BackendCatalogs catalogs = new BackendCatalogs(TestConfigs.proxyConfig());
     Catalog callerA = mock(Catalog.class);
     Catalog callerB = mock(Catalog.class);
-    catalogs.seedCallerCatalog("hash-a|lake", callerA);
-    catalogs.seedCallerCatalog("hash-b|lake", callerB);
+    catalogs.seedCallerCatalog("lake", "Bearer a", callerA);
+    catalogs.seedCallerCatalog("lake", "Bearer b", callerB);
     TableIdentifier events = TableIdentifier.of("logs", "events");
     TableIdentifier other = TableIdentifier.of("logs", "other");
 

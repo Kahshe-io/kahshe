@@ -53,7 +53,7 @@ public final class KahsheHandler implements HttpHandler {
         format.indexCacheBytes() + format.termCacheBytes() + format.planCacheBytes()
             + (format.gramIndexEnabled() ? format.gramCacheBytes() : 0);
     this.planRoutes = new PlanRoutes(config, format, catalogs, metrics, termIndex);
-    this.countRoutes = new CountRoutes(config, format, catalogs, termIndex);
+    this.countRoutes = new CountRoutes(format, catalogs, termIndex);
     this.authGate = new AuthGate(forwarder, config.authCacheTtlMs(), metrics);
     this.indexer = indexer;
   }

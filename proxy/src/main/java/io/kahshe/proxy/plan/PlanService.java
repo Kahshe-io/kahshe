@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.expressions.InclusiveMetricsEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
@@ -27,13 +26,14 @@ import org.apache.iceberg.rest.responses.PlanTableScanResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.kahshe.proxy.ProxyConfig;
+import io.kahshe.proxy.catalog.BackendCatalogs;
 import io.kahshe.proxy.catalog.Mutations;
 
 /**
  * kahshe's plan implementation.
  *
- * <p>Manifest planning runs once per (table, current snapshot); each request evaluates its filter
- * against the cached files' stats and the indexes. Two parallel task lists are cached: a
+ * <p>Manifest planning runs once per (identity, table, current snapshot); each request evaluates
+ * its filter against the cached files' stats and the indexes. Two parallel task lists are cached: a
  * stats-laden one for evaluation and a stats-stripped one for responses, so per-file column
  * min/max never leaves the proxy unless a request asks for it and the table allows it.
  * Time-travel and incremental requests plan directly and bypass the cache.
@@ -95,34 +95,27 @@ public final class PlanService {
     metrics.planCacheWeightBytes = planCache::estimatedWeightBytes;
   }
 
-  /** As below, from a caller with no bearer: the audit line says {@code caller=none}. */
-  public PlanTableScanResponse plan(
-      Catalog catalog,
-      TableIdentifier ident,
-      PlanTableScanRequest request,
-      List<IndexPruner.ContainsHint> hints) {
-    return plan(catalog, ident, request, hints, null);
-  }
-
   /**
    * Plans one scan, always {@code COMPLETED} with every task in the response. A table with no
    * current snapshot, asked for without pinning one, gets an empty plan: an unwritten table has
    * nothing to scan, and that is not a failure.
    *
-   * <p>Every plan served leaves one INFO line and moves the table's counters; {@code callerToken}
-   * is the request's Authorization header, which appears in that line only as a hash.
+   * <p>{@code planning} is the client the table and its manifests are read through and the key
+   * naming who that client is; the plan is cached under that key. Every plan served leaves one
+   * INFO line and moves the table's counters; {@code callerToken} is the request's Authorization
+   * header, which appears in that line only as a hash ({@code none} without one).
    *
    * @throws DeleteBearingSnapshotException for a snapshot not provably delete-free, unless
    *     {@code KAHSHE_SERVE_DELETE_BEARING} is set
    */
   public PlanTableScanResponse plan(
-      Catalog catalog,
+      BackendCatalogs.PlanningCatalog planning,
       TableIdentifier ident,
       PlanTableScanRequest request,
       List<IndexPruner.ContainsHint> hints,
       String callerToken) {
     long start = System.nanoTime();
-    Table table = catalog.loadTable(ident);
+    Table table = planning.catalog().loadTable(ident);
 
     if (table.currentSnapshot() == null && request.snapshotId() == null) {
       // freshly created table: an empty plan, not an NPE
@@ -150,7 +143,11 @@ public final class PlanService {
       // time travel: plan directly, never disturb the current-snapshot cache
       plan = buildPlan(table, targetSnapshotId);
     } else {
-      String cacheKey = table.location();
+      // Keyed by the identity that read the manifests as well as the table. A plan is what one
+      // client's credentials could see; served to a caller whose own client never read them, it
+      // would be kahshe's disclosure rather than the catalog's. Under service identity the key
+      // is the same for every caller, which is that mode's documented trade.
+      String cacheKey = planning.key() + "|" + table.location();
       plan = planCache.get(cacheKey);
       if (plan == null || plan.snapshotId() != targetSnapshotId) {
         // single-flight: concurrent cold plans for the same table share one manifest read

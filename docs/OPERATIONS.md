@@ -288,14 +288,26 @@ the signal that it is too small.
   snapshot=N caller=<hash> files_in=N files_kept=N ms=N` — where `caller` is the first eight hex
   digits of the SHA-256 of the bearer (`none` without one): enough to tie one caller's plans
   together, never the token, and never a file path.
-- **Granularity is a deployment choice.** By default the gate proves the caller can load the table and
-  planning then runs under kahshe's service credential, so sub-table controls (column masking, row
-  filters) are not honored on served endpoints. `KAHSHE_PLANNING_IDENTITY=caller` plans and counts
-  under the caller's own token instead — caller-scoped catalog clients in a bounded LRU keyed by token
-  hash — so backend authorization and vended-credential scoping apply to every metadata read.
-- **Residual in `service` mode**: the per-(table, snapshot) plan cache is shared across callers who
-  each passed their own load check, and file *locations* are visible to any authorized planner. Deploy
-  it only where table-level read implying index visibility is acceptable.
+- **Served reads run as the caller.** By default (`KAHSHE_PLANNING_IDENTITY=caller`) the table and
+  its manifests are read through a catalog client authenticated as the bearer the request carried —
+  one client per (token, prefix) in a bounded LRU of 64 keyed by token hash, closed on eviction — so
+  the backend's own authorization and its vended-credential scoping apply to every metadata read,
+  and the plan cache is keyed by that client: a plan built under one caller's credentials is never
+  served to another. The gate above is admission control in front of that client cache, not the
+  authorization; a refusal from the caller's own client is answered with the backend's status
+  (401, 403, 404) rather than a 500; a backend fault from that client (a 5xx, a 409) is still a 500. Two things this does NOT deliver: a catalog's own row filters or
+  column masks — kahshe plans from the manifests it reads itself, so a served plan is a file list
+  under either identity (Databricks Unity's ABAC is the known case, [COMPATIBILITY.md](COMPATIBILITY.md)) —
+  and a bearer the proxy cannot re-present to the catalog (sender-constrained tokens, SigV4). The
+  cost is per principal: `kahshe_plan_cache_misses_total` and `kahshe_plan_cache_evictions_total`
+  scale with distinct tokens per table, a token rotation is a cold plan, and each fresh token is one
+  `RESTCatalog.initialize()` against the backend.
+- **`service` is the opt-in, announced at startup.** `KAHSHE_PLANNING_IDENTITY=service` plans and
+  counts under kahshe's own `KAHSHE_CREDENTIAL` once the gate has passed, and one plan per (table,
+  snapshot) is shared by every caller the backend admits — so sub-table controls at the catalog stop
+  at the table on served endpoints, and file *locations* are visible to any authorized planner. The
+  process logs a WARN saying so. Right only where table-level read means see-everything: a
+  single-tenant lake, or a fleet whose tokens rotate faster than a per-token client cache can follow.
 - **Know what is disclosed.** Plan responses are stats-stripped by default (`KAHSHE_PLAN_STATS`), and
   `_count` is a content oracle — an exact token occurrence count in the indexed column for anyone
   whose token can load the table, regardless of masking or row filters at the backend. Watch webhook

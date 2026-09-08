@@ -22,8 +22,9 @@ import io.kahshe.proxy.catalog.BackendCatalogs;
 /**
  * The four scan-planning endpoints, served inline by {@link PlanService}: every plan, incremental
  * ones included, is answered COMPLETED with all of its tasks, so no plan id names server-side
- * state and no request depends on the replica that answered an earlier one. Fetch and cancel are
- * therefore decided by the id's shape alone.
+ * state and no request depends on the replica that answered an earlier one. Fetch, cancel and
+ * tasks are therefore decided by the id's shape alone: they touch no catalog and carry no
+ * identity. Only a submit chooses a client, through {@link BackendCatalogs#forPlanning}.
  */
 public final class PlanRoutes {
   private static final Logger LOG = LoggerFactory.getLogger(PlanRoutes.class);
@@ -53,7 +54,6 @@ public final class PlanRoutes {
 
   public record Result(int status, byte[] body) {}
 
-  private final ProxyConfig config;
   private final BackendCatalogs backendCatalogs;
   private final PlanService planService;
   private final io.kahshe.common.Metrics metrics;
@@ -64,7 +64,6 @@ public final class PlanRoutes {
       BackendCatalogs backendCatalogs,
       io.kahshe.common.Metrics metrics,
       io.kahshe.format.type.term.TermIndex termIndex) {
-    this.config = config;
     this.backendCatalogs = backendCatalogs;
     this.metrics = metrics;
     this.planService = new PlanService(metrics, termIndex, config, format);
@@ -184,13 +183,16 @@ public final class PlanRoutes {
 
 
   public Result handle(Match match, byte[] body, String callerToken) {
-    Catalog catalog =
-        config.callerIdentityPlanning() && callerToken != null
-            ? backendCatalogs.forCaller(match.rawPrefix(), callerToken)
-            : backendCatalogs.forPrefix(match.prefix());
     try {
       switch (match.route()) {
         case SUBMIT_PLAN -> {
+          // Chosen here and not above the switch: under caller identity a fresh token costs a
+          // network initialize, which the three id-shaped routes below have no use for, and a
+          // backend that refuses that initialize must answer with its own status, which only
+          // the catch clauses below can give it.
+          BackendCatalogs.PlanningCatalog planning =
+              backendCatalogs.forPlanning(match.prefix(), callerToken);
+          Catalog catalog = planning.catalog();
           // Never plan a view older than the one this proxy handed the client. Clients do not pin
           // snapshot-id on ordinary scans, so kahshe is the only party that can notice.
           if (backendCatalogs.reconcileToObserved(catalog, match.prefix(), match.ident())) {
@@ -202,7 +204,7 @@ public final class PlanRoutes {
                   name -> declaresColumn(catalog, match.ident(), name));
           PlanTableScanRequest request = PlanTableScanRequestParser.fromJson(extraction.cleanedJson());
           PlanTableScanResponse response =
-              planService.plan(catalog, match.ident(), request, extraction.hints(), callerToken);
+              planService.plan(planning, match.ident(), request, extraction.hints(), callerToken);
           return json(200, PlanTableScanResponseParser.toJson(response));
         }
         case FETCH_PLAN -> {
@@ -234,12 +236,10 @@ public final class PlanRoutes {
           "{\"error\":{\"message\":\""
               + String.valueOf(e.getMessage()).replace("\"", "'")
               + "\",\"type\":\"UnprocessableEntityException\",\"code\":422}}");
-    } catch (org.apache.iceberg.exceptions.NotAuthorizedException e) {
-      return json(
-          401, "{\"error\":{\"message\":\"not authorized\",\"type\":\"NotAuthorizedException\",\"code\":401}}");
-    } catch (org.apache.iceberg.exceptions.ForbiddenException e) {
-      return json(
-          403, "{\"error\":{\"message\":\"forbidden\",\"type\":\"ForbiddenException\",\"code\":403}}");
+    } catch (org.apache.iceberg.exceptions.NotAuthorizedException
+        | org.apache.iceberg.exceptions.ForbiddenException
+        | NoSuchTableException e) {
+      return refused(e, match.ident());
     } catch (org.apache.iceberg.exceptions.ValidationException | IllegalArgumentException e) {
       // A 400 that hides what was refused is useless to whoever reads the log; the body is the
       // client's own request, bounded so a large one cannot flood the log.
@@ -261,14 +261,33 @@ public final class PlanRoutes {
           "{\"error\":{\"message\":\"Cannot find plan with id "
               + String.valueOf(match.planId()).replace("\"", "'")
               + "\",\"type\":\"NoSuchPlanIdException\",\"code\":404}}");
-    } catch (NoSuchTableException e) {
-      LOG.warn("plan request for missing table {}", match.ident());
+    }
+  }
+
+  /**
+   * The backend's own meaning for a refusal met on a served route, or null when {@code e} is not
+   * one: 401 and 403 as the catalog gave them, 404 for a table the caller's client cannot see.
+   * Shared with {@code CountRoutes}, whose load runs through the same client: unmapped, the same
+   * three answers reach the dispatcher as a 500, which an engine retries rather than re-authenticates.
+   */
+  static Result refused(RuntimeException e, TableIdentifier ident) {
+    if (e instanceof org.apache.iceberg.exceptions.NotAuthorizedException) {
+      return json(
+          401, "{\"error\":{\"message\":\"not authorized\",\"type\":\"NotAuthorizedException\",\"code\":401}}");
+    }
+    if (e instanceof org.apache.iceberg.exceptions.ForbiddenException) {
+      return json(
+          403, "{\"error\":{\"message\":\"forbidden\",\"type\":\"ForbiddenException\",\"code\":403}}");
+    }
+    if (e instanceof NoSuchTableException) {
+      LOG.warn("request for missing table {}", ident);
       return json(
           404,
           "{\"error\":{\"message\":\"Table does not exist: "
-              + match.ident()
+              + ident
               + "\",\"type\":\"NoSuchTableException\",\"code\":404}}");
     }
+    return null;
   }
 
   private static TableIdentifier ident(Matcher m) {

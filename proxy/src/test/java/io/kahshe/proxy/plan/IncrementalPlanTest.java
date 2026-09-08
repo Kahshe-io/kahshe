@@ -23,6 +23,7 @@ import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import io.kahshe.proxy.TestConfigs;
+import io.kahshe.proxy.catalog.BackendCatalogs;
 
 /**
  * An incremental scan ({@code start-snapshot-id}) is planned inline, COMPLETED, with every task
@@ -58,13 +59,15 @@ class IncrementalPlanTest {
     long s3 = table.currentSnapshot().snapshotId();
 
     PlanService service = new PlanService(metrics, new TermIndex(config.format(), metrics), TestConfigs.proxyConfig(), config.format());
+    BackendCatalogs.PlanningCatalog planning = new BackendCatalogs.PlanningCatalog("service|test", catalog);
 
     PlanTableScanResponse incremental =
         service.plan(
-            catalog,
+            planning,
             ident,
             PlanTableScanRequest.builder().withStartSnapshotId(s1).withEndSnapshotId(s3).build(),
-            List.of());
+            List.of(),
+            null);
     assertEquals(PlanStatus.COMPLETED, incremental.planStatus(), "answered in one response");
     assertTrue(
         incremental.planId().startsWith(PlanService.INLINE_PLAN_ID_PREFIX),
@@ -77,7 +80,7 @@ class IncrementalPlanTest {
     // Control: the same table planned without a range returns everything, so the range is what
     // did the excluding.
     PlanTableScanResponse full =
-        service.plan(catalog, ident, PlanTableScanRequest.builder().build(), List.of());
+        service.plan(planning, ident, PlanTableScanRequest.builder().build(), List.of(), null);
     assertEquals(Set.of(f1, f2, f3), locations(full));
   }
 }

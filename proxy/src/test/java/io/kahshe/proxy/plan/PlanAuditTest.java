@@ -9,6 +9,7 @@ import io.kahshe.format.type.term.TermIndex;
 import io.kahshe.indexer.BuildConfig;
 import io.kahshe.indexer.LocalTableFixture;
 import io.kahshe.proxy.TestConfigs;
+import io.kahshe.proxy.catalog.BackendCatalogs;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -73,12 +74,13 @@ class PlanAuditTest {
     long snapshot = table.currentSnapshot().snapshotId();
     PlanService service = new PlanService(
         metrics, new TermIndex(config.format(), metrics), TestConfigs.proxyConfig(), config.format());
+    BackendCatalogs.PlanningCatalog planning = new BackendCatalogs.PlanningCatalog("service|test", catalog);
     // eq on a column with per-file bounds: the stats pass keeps one of the two files
     PlanTableScanRequest request = PlanTableScanRequestParser.fromJson(
         "{\"filter\":{\"type\":\"eq\",\"term\":\"" + LocalTableFixture.COLUMN + "\",\"value\":\"alpha\"}}");
 
     String log = captureStderr(
-        () -> service.plan(catalog, ident, request, List.of(), "Bearer " + TOKEN));
+        () -> service.plan(planning, ident, request, List.of(), "Bearer " + TOKEN));
 
     Matcher line = Pattern.compile(
         "plan table=logs\\.events snapshot=" + snapshot + " caller=" + callerId()
@@ -90,7 +92,7 @@ class PlanAuditTest {
     assertEquals(1, metrics.tablePlanRequests.get(key).sum());
     assertEquals(1, metrics.tablePlanFilesKept.get(key).sum());
 
-    String anonymous = captureStderr(() -> service.plan(catalog, ident, request, List.of(), null));
+    String anonymous = captureStderr(() -> service.plan(planning, ident, request, List.of(), null));
     assertTrue(anonymous.contains(" caller=none "), "no bearer says so:\n" + anonymous);
     assertEquals(2, metrics.tablePlanRequests.get(key).sum());
   }

@@ -16,12 +16,16 @@ import org.slf4j.LoggerFactory;
 import io.kahshe.proxy.ProxyConfig;
 
 /**
- * Internal REST catalog clients pointed directly at the backing catalog, one per path prefix.
+ * Internal REST catalog clients pointed directly at the backing catalog, under two identities: one
+ * service client per path prefix ({@code KAHSHE_CREDENTIAL}, what a build reads with) and one
+ * client per (caller token, prefix) for the served endpoints. {@link #forPlanning} is the only
+ * place the planning identity is read.
  *
  * <p>These clients stay in client planning mode (the default), so planning executes locally in the
  * proxy from manifests. The prefix in plan-endpoint paths is treated as the warehouse name, which
  * holds for Polaris (prefix == catalog name) but not for Nessie, whose prefix encodes branch and
- * warehouse ("main|warehouse"); KAHSHE_BACKEND_WAREHOUSE overrides the guess there.
+ * warehouse ("main|warehouse"); KAHSHE_BACKEND_WAREHOUSE overrides the guess there. Every prefix
+ * here is the DECODED path segment, whichever identity the client carries.
  */
 public final class BackendCatalogs implements io.kahshe.indexer.TableSource {
   private static final Logger LOG = LoggerFactory.getLogger(BackendCatalogs.class);
@@ -44,7 +48,7 @@ public final class BackendCatalogs implements io.kahshe.indexer.TableSource {
   private final Map<String, Catalog> catalogs = new ConcurrentHashMap<>();
   /**
    * Caller-scoped catalogs, keyed by token hash and prefix, closed when evicted. Each entry is a
-   * fully initialized {@code RESTCatalog} — a pooled HTTP client and a token-refresh executor — and
+   * fully initialized {@code RESTCatalog} — a pooled HTTP client and its sessions — and
    * under {@code KAHSHE_PLANNING_IDENTITY=caller} every token rotation mints one and evicts
    * another, so an entry left unclosed leaks its thread and its sockets for the life of the process.
    */
@@ -67,9 +71,45 @@ public final class BackendCatalogs implements io.kahshe.indexer.TableSource {
     this.config = config;
   }
 
+  /**
+   * The client a plan or a count is built through, and the string naming the identity it
+   * authenticates as. The key is the only thing a plan may be cached under: a plan is manifests
+   * read under one identity's credentials, and served under another it is kahshe's disclosure,
+   * not the catalog's.
+   */
+  public record PlanningCatalog(String key, Catalog catalog) {}
+
+  /**
+   * The client for a served request under the configured identity. Under {@code caller} a
+   * request without a bearer is refused here, never planned as the service: the gate in front of
+   * the routes already answers 401 for that, so this is the twin guard for anything that reaches
+   * a route directly. Under {@code service} the key still carries the prefix, so two prefixes
+   * over one table location (Nessie branches) do not share an entry.
+   */
+  public PlanningCatalog forPlanning(String prefix, String authorization) {
+    if (!config.callerIdentityPlanning()) {
+      return new PlanningCatalog(ProxyConfig.PLANNING_SERVICE + "|" + prefix, forPrefix(prefix));
+    }
+    if (authorization == null || authorization.isBlank()) {
+      throw new org.apache.iceberg.exceptions.NotAuthorizedException(
+          "Authorization header required");
+    }
+    String token = bareToken(authorization);
+    return new PlanningCatalog(callerKey(prefix, token), forCaller(prefix, token));
+  }
+
   public Catalog forPrefix(String prefix) {
     return catalogs.computeIfAbsent(
         prefix, p -> maybeCache(create(p), config.tableCacheTtlMs()));
+  }
+
+  private static String bareToken(String authorization) {
+    return authorization.startsWith("Bearer ") ? authorization.substring(7) : authorization;
+  }
+
+  /** One construction site for the caller-catalog key: a token hash, never the token, plus prefix. */
+  private static String callerKey(String prefix, String bareToken) {
+    return Hashing.sha256Base64(bareToken) + "|" + prefix;
   }
 
   /** Per-token lock for {@link #forCaller}, so one token's initialization blocks only itself. */
@@ -87,8 +127,8 @@ public final class BackendCatalogs implements io.kahshe.indexer.TableSource {
    * concurrently while two requests bearing the same token share one initialization.
    */
   public Catalog forCaller(String prefix, String bearerToken) {
-    String token = bearerToken.startsWith("Bearer ") ? bearerToken.substring(7) : bearerToken;
-    String key = Hashing.sha256Base64(token) + "|" + prefix;
+    String token = bareToken(bearerToken);
+    String key = callerKey(prefix, token);
     Catalog cached = callerCatalogs.get(key);
     if (cached != null) {
       return cached;
@@ -100,12 +140,7 @@ public final class BackendCatalogs implements io.kahshe.indexer.TableSource {
           LOG.info("initializing caller-identity catalog client for prefix '{}'", prefix);
           RESTCatalog catalog = new RESTCatalog();
           catalog.setConf(new Configuration());
-          Map<String, String> props = new ConcurrentHashMap<>();
-          props.put(CatalogProperties.URI, config.backendBase());
-          props.put(CatalogProperties.WAREHOUSE_LOCATION, warehouseFor(prefix));
-          props.put(CatalogProperties.IO_MANIFEST_CACHE_ENABLED, "true");
-          props.put(OAuth2Properties.TOKEN, token);
-          catalog.initialize("kahshe-caller-" + prefix, props);
+          catalog.initialize("kahshe-caller-" + prefix, callerProperties(prefix, token));
           Catalog wrapped = maybeCache(catalog, config.tableCacheTtlMs());
           callerCatalogs.put(key, wrapped);
           return wrapped;
@@ -114,6 +149,41 @@ public final class BackendCatalogs implements io.kahshe.indexer.TableSource {
 
   private String warehouseFor(String prefix) {
     return config.backendWarehouse().isBlank() ? prefix : config.backendWarehouse();
+  }
+
+  /**
+   * Everything a client needs short of who it is, built once for both identities so a backend the
+   * service client can reach the caller client can reach. The CA landed on one of the two copies
+   * this replaced and not the other.
+   */
+  /**
+   * The caller client's properties: the shared base plus the caller's own bearer, and refresh
+   * switched off. Left on, Iceberg reads {@code exp} out of a JWT and schedules a refresh by token
+   * exchange before it expires — the proxy would then hold a credential for that principal which
+   * the caller never presented, past the life of the token they did. A replayed token is the
+   * caller's to renew: when it expires the backend refuses, the refusal is relayed, and the engine
+   * re-authenticates with a new one, which mints a new client.
+   */
+  Map<String, String> callerProperties(String prefix, String bareToken) {
+    Map<String, String> props = baseProperties(prefix);
+    props.put(OAuth2Properties.TOKEN, bareToken);
+    props.put(OAuth2Properties.TOKEN_REFRESH_ENABLED, "false");
+    return props;
+  }
+
+  private Map<String, String> baseProperties(String prefix) {
+    Map<String, String> props = new ConcurrentHashMap<>();
+    props.put(CatalogProperties.URI, config.backendBase());
+    props.put(CatalogProperties.WAREHOUSE_LOCATION, warehouseFor(prefix));
+    // manifests and manifest lists are immutable; cache their bytes across plans
+    props.put(CatalogProperties.IO_MANIFEST_CACHE_ENABLED, "true");
+    // A backend behind a private CA: Iceberg's only seam for this is a configurer class named
+    // by property, which then reads our CA path out of the same map.
+    if (!config.backendCa().isBlank()) {
+      props.put(BackendTls.CONFIGURER_PROPERTY, BackendTls.class.getName());
+      props.put(BackendTls.CA_PROPERTY, config.backendCa());
+    }
+    return props;
   }
 
 
@@ -185,9 +255,12 @@ public final class BackendCatalogs implements io.kahshe.indexer.TableSource {
     }
   }
 
-  /** Test seam: installs a caller-scoped catalog under {@code key} without a network init. */
-  public void seedCallerCatalog(String key, Catalog catalog) {
-    callerCatalogs.put(key, catalog);
+  /**
+   * Test seam: installs a caller-scoped catalog for this prefix and bearer without a network init,
+   * keyed by the same function {@link #forCaller} reads with, so no test spells the key by hand.
+   */
+  public void seedCallerCatalog(String prefix, String authorization, Catalog catalog) {
+    callerCatalogs.put(callerKey(prefix, bareToken(authorization)), catalog);
   }
 
   /** {@link io.kahshe.indexer.TableSource}: the current table from the catalog behind the prefix. */
@@ -219,17 +292,7 @@ public final class BackendCatalogs implements io.kahshe.indexer.TableSource {
     LOG.info("initializing backend catalog client for prefix '{}'", prefix);
     RESTCatalog catalog = new RESTCatalog();
     catalog.setConf(new Configuration());
-    Map<String, String> props = new ConcurrentHashMap<>();
-    props.put(CatalogProperties.URI, config.backendBase());
-    props.put(CatalogProperties.WAREHOUSE_LOCATION, warehouseFor(prefix));
-    // manifests and manifest lists are immutable; cache their bytes across plans
-    props.put(CatalogProperties.IO_MANIFEST_CACHE_ENABLED, "true");
-    // A backend behind a private CA: Iceberg's only seam for this is a configurer class named
-    // by property, which then reads our CA path out of the same map.
-    if (!config.backendCa().isBlank()) {
-      props.put(BackendTls.CONFIGURER_PROPERTY, BackendTls.class.getName());
-      props.put(BackendTls.CA_PROPERTY, config.backendCa());
-    }
+    Map<String, String> props = baseProperties(prefix);
     if (!config.credential().isBlank()) {
       props.put(OAuth2Properties.CREDENTIAL, config.credential());
       props.put(OAuth2Properties.OAUTH2_SERVER_URI, config.oauthTokenUri());

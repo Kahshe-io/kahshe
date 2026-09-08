@@ -26,7 +26,10 @@ public final class TestConfigs {
   /** The serving side's record, as the app's {@code fromEnv} would build it for a test. */
   public static ProxyConfig proxyConfig() {
     return new ProxyConfig(
-        "http://localhost:0", "", "", true, 0, 1_000, 1 << 20, "service", "",
+        "http://localhost:0", "", "", true, 0, 1_000, 1 << 20,
+        // the production default; a test of service mode overrides planningIdentity by name
+        ProxyConfig.DEFAULT_PLANNING_IDENTITY,
+        "",
         false, // serveDeleteBearing: the suite exercises the guard, not the escape hatch
         "all", // advertiseServerMode: the production default; MutationsTest varies it
         10_000L, // tableCacheTtlMs: the production default; TableCacheTest varies it

@@ -46,10 +46,10 @@ Bearer tokens pass through; kahshe does not sign requests.
 |---|---|---|
 | **Apache Polaris 1.7** | works — the quickstart runs on it | Polaris has no `/plan` of its own |
 | **Project Nessie 0.108** | works | Its prefix encodes branch and warehouse with a pipe character; kahshe round-trips it verbatim |
-| **Lakekeeper 0.13** | works | No static credential: kahshe's planning identity must be an OIDC client-credentials or Kubernetes service-account token |
+| **Lakekeeper 0.13** | works | No static credential. Served plans run as the caller's own OIDC token by default; what still needs a credential of kahshe's own is a build, so `KAHSHE_CREDENTIAL` is an OIDC client-credentials or Kubernetes service-account token wherever the indexer runs |
 | **Apache Gravitino 1.3** | works, with a caveat | Gravitino answers `/plan` itself; behind kahshe, kahshe's planner replaces it |
 | **Unity Catalog OSS 0.6** | works | Auth is off by default, but kahshe's served endpoints require a bearer |
-| **Snowflake Open Catalog, Databricks Unity Catalog** | works | On Databricks, in `service` mode kahshe answers `/plan` with an unfiltered file list where Unity would enforce row filters — use `KAHSHE_PLANNING_IDENTITY=caller` |
+| **Snowflake Open Catalog, Databricks Unity Catalog** | works, with a caveat | On Databricks a served `/plan` is a file list kahshe derives from the manifests it reads itself, so a Unity row filter or column mask is not applied to it under either identity. The default `caller` identity does apply Unity's per-principal table authorization and credential vending to every metadata read; `service` applies neither past the gate |
 | **AWS Glue Iceberg REST, S3 Tables** | **not yet** | They require SigV4 request signing, which kahshe does not do |
 
 ## Merge-on-read

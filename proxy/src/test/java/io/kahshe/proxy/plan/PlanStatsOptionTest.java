@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import io.kahshe.proxy.ProxyConfig;
 import io.kahshe.proxy.TestConfigs;
+import io.kahshe.proxy.catalog.BackendCatalogs;
 
 /**
  * The stats option: by default a plan response carries no per-file column statistics; under
@@ -66,7 +67,9 @@ class PlanStatsOptionTest {
     String body = "{\"filter\":{\"type\":\"eq\",\"term\":\"" + LocalTableFixture.COLUMN + "\",\"value\":\"alpha\"}"
         + (statsFields == null ? "" : ",\"stats-fields\":[" + statsFields + "]") + "}";
     PlanTableScanRequest request = PlanTableScanRequestParser.fromJson(body);
-    List<org.apache.iceberg.FileScanTask> tasks = service.plan(catalog, ident, request, List.of()).fileScanTasks();
+    List<org.apache.iceberg.FileScanTask> tasks =
+        service.plan(new BackendCatalogs.PlanningCatalog("service|test", catalog), ident, request, List.of(), null)
+            .fileScanTasks();
     assertEquals(1, tasks.size());
     return tasks.get(0).file();
   }

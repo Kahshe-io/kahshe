@@ -10,7 +10,6 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.TableIdentifier;
 import io.kahshe.indexer.maintain.IndexerService;
 import org.apache.iceberg.rest.RESTUtil;
-import io.kahshe.proxy.ProxyConfig;
 import io.kahshe.proxy.catalog.BackendCatalogs;
 import io.kahshe.proxy.http.KahsheHandler;
 
@@ -19,24 +18,23 @@ import io.kahshe.proxy.http.KahsheHandler;
  * speed, without reading a data file.
  *
  * <p>Exact or refusing, never silently approximate — every condition under which the number would
- * be an upper bound answers 4xx with the reason instead. Caller authorization is enforced upstream
- * by {@link KahsheHandler}: a loadTable forwarded with the caller's own bearer token must succeed
- * before this runs.
+ * be an upper bound answers 4xx with the reason instead. The gate in {@link KahsheHandler} proves
+ * the caller's own bearer can load the table; the load that follows here runs through the client
+ * {@link BackendCatalogs#forPlanning} chooses — the caller's own, by default — and a refusal from
+ * it is answered with the backend's status rather than a 500. The count itself comes from the
+ * index, which is built under the service identity whichever client loaded the table.
  */
 public final class CountRoutes {
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  private final ProxyConfig config;
   private final io.kahshe.format.FormatConfig format;
   private final BackendCatalogs catalogs;
   private final TermIndex termIndex;
 
   public CountRoutes(
-      ProxyConfig config,
       io.kahshe.format.FormatConfig format,
       BackendCatalogs catalogs,
       TermIndex termIndex) {
-    this.config = config;
     this.format = format;
     this.catalogs = catalogs;
     this.termIndex = termIndex;
@@ -61,11 +59,20 @@ public final class CountRoutes {
         TableIdentifier.of(
             RESTUtil.decodeNamespace(namespaceRaw, IndexerService.NAMESPACE_SEPARATOR),
             java.net.URLDecoder.decode(tableRaw, StandardCharsets.UTF_8));
-    Table table =
-        (config != null && config.callerIdentityPlanning() && callerToken != null
-                ? catalogs.forCaller(prefixRaw, callerToken)
-                : catalogs.forPrefix(java.net.URLDecoder.decode(prefixRaw, StandardCharsets.UTF_8)))
-            .loadTable(ident);
+    Table table;
+    try {
+      table =
+          catalogs
+              .forPlanning(java.net.URLDecoder.decode(prefixRaw, StandardCharsets.UTF_8), callerToken)
+              .catalog()
+              .loadTable(ident);
+    } catch (RuntimeException e) {
+      PlanRoutes.Result refused = PlanRoutes.refused(e, ident);
+      if (refused != null) {
+        return refused;
+      }
+      throw e;
+    }
 
     if (table.currentSnapshot() == null) {
       return new PlanRoutes.Result(
@@ -144,7 +151,7 @@ public final class CountRoutes {
     int filesWithTerm;
     try {
       if (normalizedPrefix != null) {
-        int cap = config == null ? 100_000 : format.prefixMaxTerms();
+        int cap = format.prefixMaxTerms();
         TermIndex.PrefixEntries run = termIndex.entriesForPrefix(table, index, normalizedPrefix, cap);
         if (run == null) {
           return error(

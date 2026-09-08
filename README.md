@@ -124,7 +124,8 @@ helm install kahshe ./helm/kahshe --set backend.url=http://nessie:19120/iceberg
 | `KAHSHE_SERVE_DELETE_BEARING` | `false` while Trino reads through the proxy |
 
 Alert on `kahshe_index_max_behind_seconds`. Authorization stays with your catalog: served endpoints
-check the caller's own token can load the table. Everything else: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+plan as the caller — the caller's own token loads the table and reads its manifests, and one caller's
+plan is never served to another. Everything else: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Read next
 

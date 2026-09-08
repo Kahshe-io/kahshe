@@ -183,6 +183,17 @@ public final class Kahshe {
 
     HttpServer server = null;
     if (!"watch".equals(mode)) {
+      if (!config.proxy().callerIdentityPlanning()) {
+        // Watch mode has no served path, so the identity is only worth announcing here. The
+        // other two posture warnings above and below are about what is exposed; this one is
+        // about who is trusted to read on a caller's behalf.
+        LOG.warn("KAHSHE_PLANNING_IDENTITY=service: /plan and /_count read table metadata as "
+                + "kahshe (KAHSHE_CREDENTIAL) once the caller's own token has loaded the table, "
+                + "and one plan per table is shared by every caller the backend admits. Row "
+                + "filters, column masks and vended-credential scoping at the catalog do not "
+                + "reach the served endpoints. Right only where table-level read means "
+                + "see-everything; the default, caller, is the other case.");
+      }
       server = create(new InetSocketAddress(config.port()), tls);
       server.createContext("/", new KahsheHandler(config.proxy(), config.format(), metrics, catalogs, indexer));
       // bounded pool: saturation queues briefly, then connections are refused — never unbounded
@@ -257,12 +268,14 @@ public final class Kahshe {
               : "scanning, and delivering the build reports of builds elsewhere; indexer off");
     } else {
       LOG.info(
-          "kahshe listening on :{} (admin {}:{}) -> backend {} (inject planning: {}, mode: {})",
+          "kahshe listening on :{} (admin {}:{}) -> backend {} (inject planning: {}, planning "
+              + "identity: {}, mode: {})",
           config.port(),
           config.adminBind(),
           config.adminPort(),
           config.proxy().backendBase(),
           config.proxy().injectPlanning(),
+          config.proxy().planningIdentity(),
           mode);
     }
   }
@@ -350,7 +363,12 @@ public final class Kahshe {
           intEnv("KAHSHE_AUTH_CACHE_TTL_MS", 60000),
           intEnv("KAHSHE_BACKEND_TIMEOUT_MS", 5000),
           intEnv("KAHSHE_MAX_BODY_BYTES", 16 * 1024 * 1024),
-          env("KAHSHE_PLANNING_IDENTITY", "service"),
+          // caller (default) or service: whose credentials the served endpoints read metadata
+          // with. The one spelling of the default is the record's; a service opt-in is announced
+          // at startup, since it is the mode under which the catalog's per-principal rules stop
+          // at the table.
+          checkPlanningIdentity(
+              env("KAHSHE_PLANNING_IDENTITY", ProxyConfig.DEFAULT_PLANNING_IDENTITY)),
           env("KAHSHE_BACKEND_WAREHOUSE", ""),
           // Whether to plan snapshots that carry delete files; refused by default. See
           // PlanService's guard for what the refusal protects and who can safely lift it.
@@ -482,6 +500,20 @@ public final class Kahshe {
           && !value.equals(Mutations.ADVERTISE_NONE)) {
         throw new IllegalArgumentException("KAHSHE_ADVERTISE_SERVER_MODE must be all, indexed or "
             + "none (lowercase), not '" + value + "'");
+      }
+      return value;
+    }
+
+    /**
+     * The two planning identities, refused at startup rather than silently widened. The reader
+     * is an exact match on {@code caller}, so any other spelling would plan as the service — the
+     * mode an operator who typed {@code Caller} was asking to leave.
+     */
+    static String checkPlanningIdentity(String value) {
+      if (!value.equals(ProxyConfig.PLANNING_CALLER)
+          && !value.equals(ProxyConfig.PLANNING_SERVICE)) {
+        throw new IllegalArgumentException("KAHSHE_PLANNING_IDENTITY must be caller or service "
+            + "(lowercase), not '" + value + "'");
       }
       return value;
     }

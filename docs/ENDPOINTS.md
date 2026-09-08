@@ -37,7 +37,7 @@ naming the Iceberg exception where there is one:
 | 200 | — | submit |
 | 204 | — | cancel of an id kahshe minted (they start `sync-`) — nothing was created, so nothing is left to cancel |
 | 400 | `BadRequestException` | unreadable request, or a filter extension under `OR`/`NOT` |
-| 401 / 403 | `NotAuthorizedException` / `ForbiddenException` | no `Authorization` header, or the caller's own token cannot load the table — a denial the backend itself produced is relayed verbatim, under its own names |
+| 401 / 403 | `NotAuthorizedException` / `ForbiddenException` | no `Authorization` header, or the caller's own token cannot load the table — a denial the backend itself produced is relayed verbatim, under its own names. The same two arise a second time when the caller's own catalog client, which reads the table and its manifests under the default identity, is refused by the backend: mapped to these names rather than relayed |
 | 404 | `NoSuchPlanIdException` | every fetch, every fetch-tasks, and a cancel of any other id — the normal answer rather than a fault, since the tasks came back with the submit |
 | 404 | `NoSuchTableException` | no such table |
 | 413 | `PayloadTooLarge` | body over `KAHSHE_MAX_BODY_BYTES` |

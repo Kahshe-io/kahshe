@@ -22,6 +22,12 @@ import io.kahshe.proxy.plan.PlanService;
  *     leave the proxy) or {@code requested} (those of the columns a request names in
  *     {@code stats-fields}). A table overrides it with {@code kahshe.plan-stats}. Disclosure
  *     traded for scan speed.
+ * @param planningIdentity whose credentials read a table's metadata on the served endpoints:
+ *     {@code caller} (the default) plans as the bearer the request carried, so the catalog's own
+ *     rules for that principal apply to every metadata read and one caller's plan is never
+ *     served to another; {@code service} plans as {@code KAHSHE_CREDENTIAL} once the caller's
+ *     token has loaded the table, one plan per table shared by everyone the backend admits.
+ *     Right only where table-level read means see-everything.
  */
 public record ProxyConfig(
     String backendBase,
@@ -40,8 +46,18 @@ public record ProxyConfig(
     /** PEM CA bundle to trust the backend's certificate; empty for the JVM default. */
     String backendCa) {
 
+  /** {@code KAHSHE_PLANNING_IDENTITY}: the two identities, and the one a deployment gets unasked. */
+  public static final String PLANNING_CALLER = "caller";
+
+  public static final String PLANNING_SERVICE = "service";
+  public static final String DEFAULT_PLANNING_IDENTITY = PLANNING_CALLER;
+
+  /**
+   * Exact, like the other mode knobs: the app refuses any other spelling at startup, so a typo
+   * cannot fall through to whichever branch is the {@code else}.
+   */
   public boolean callerIdentityPlanning() {
-    return "caller".equalsIgnoreCase(planningIdentity);
+    return PLANNING_CALLER.equals(planningIdentity);
   }
 
   public String oauthTokenUri() {

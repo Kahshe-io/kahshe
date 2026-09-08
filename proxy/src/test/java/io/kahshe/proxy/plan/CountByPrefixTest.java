@@ -14,7 +14,6 @@ import io.kahshe.indexer.LocalTableFixture;
 import io.kahshe.format.type.term.TermIndex;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.MessageDigest;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
@@ -24,7 +23,6 @@ import org.apache.iceberg.data.Record;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import io.kahshe.proxy.ProxyConfig;
 import io.kahshe.proxy.TestConfigs;
 import io.kahshe.proxy.catalog.BackendCatalogs;
 
@@ -49,18 +47,11 @@ class CountByPrefixTest {
     return r;
   }
 
-  private static String sha256(String value) throws Exception {
-    // the caller-catalog key is Base64 of the digest, as BackendCatalogs spells it
-    byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-    return java.util.Base64.getEncoder().encodeToString(digest);
-  }
-
   @Test
   void aPrefixCountSumsTheRunAndACappedOneIsRefused() throws Exception {
-    // caller-identity planning, so the route loads the table through the seeded caller catalog
+    // caller-identity planning (the default), so the route loads the table through the seeded
+    // caller catalog
     BuildConfig config = LocalTableFixture.config();
-    io.kahshe.proxy.ProxyConfig proxy =
-        LocalTableFixture.with(TestConfigs.proxyConfig(), "planningIdentity", "caller");
     Table table = LocalTableFixture.createTable(tmp, SCHEMA, "seed");
     LocalTableFixture.appendRecords(table, "f2.parquet", row(table.schema(), "71.162.18.0"), row(table.schema(), "71.162.18.0"));
     LocalTableFixture.appendRecords(table, "f3.parquet", row(table.schema(), "71.162.200.5"));
@@ -69,11 +60,11 @@ class CountByPrefixTest {
     table.refresh();
     IndexBuilder.buildColumn(table, "ip", config);
 
-    BackendCatalogs catalogs = new BackendCatalogs(proxy);
+    BackendCatalogs catalogs = new BackendCatalogs(TestConfigs.proxyConfig());
     Catalog caller = mock(Catalog.class);
     when(caller.loadTable(TableIdentifier.of("logs", "t"))).thenReturn(table);
-    catalogs.seedCallerCatalog(sha256("tok") + "|lake", caller);
-    CountRoutes routes = new CountRoutes(proxy, config.format(), catalogs, new TermIndex(config.format(), new Metrics()));
+    catalogs.seedCallerCatalog("lake", "Bearer tok", caller);
+    CountRoutes routes = new CountRoutes(config.format(), catalogs, new TermIndex(config.format(), new Metrics()));
 
     PlanRoutes.Result byPrefix = routes.count("lake", "logs", "t",
         "{\"column\":\"ip\",\"prefix\":\"71.162.\"}".getBytes(StandardCharsets.UTF_8), "Bearer tok");
@@ -93,7 +84,7 @@ class CountByPrefixTest {
     assertEquals(400, both.status(), "term and prefix are one or the other");
 
     CountRoutes capped = new CountRoutes(
-        proxy, LocalTableFixture.withPrefixMaxTerms(config, 1).format(), catalogs,
+        LocalTableFixture.withPrefixMaxTerms(config, 1).format(), catalogs,
         new TermIndex(config.format(), new Metrics()));
     PlanRoutes.Result refused = capped.count("lake", "logs", "t",
         "{\"column\":\"ip\",\"prefix\":\"71.\"}".getBytes(StandardCharsets.UTF_8), "Bearer tok");

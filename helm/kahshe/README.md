@@ -36,7 +36,9 @@ helm install kahshe ./helm/kahshe -f helm/kahshe/examples/values-split.yaml \
   false, so that only an ingress or the engine namespaces can reach the data plane.
 
 Secrets are read by name and, with one exception, never created by the chart:
-`backend.credentialSecret`; `watch.webhookSecret` with the watcher on the `webhook` sink; and with
+`backend.credentialSecret` (the credential any role that builds reads tables with; serving uses it
+only under `KAHSHE_PLANNING_IDENTITY: service`, since served plans run as the caller by default);
+`watch.webhookSecret` with the watcher on the `webhook` sink; and with
 `tls.enabled`, `tls.secretName` plus `tls.clientCaSecret` when `tls.clientAuth` is not `none`. The
 exception is `tls.certManager.enabled`, where the chart's `Certificate` has cert-manager write
 `tls.secretName`. The rules file comes from `watch.rules` (a ConfigMap the chart creates) or
