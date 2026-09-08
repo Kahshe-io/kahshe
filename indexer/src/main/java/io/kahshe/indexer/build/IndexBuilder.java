@@ -1319,18 +1319,25 @@ public final class IndexBuilder {
         projection.accessorForField(table.schema().findField(column).fieldId());
     IcebergKinds.Shape shape =
         IcebergKinds.shapeOf(table.schema().findField(column).type());
-    for (IndexType.Collector collector : collectors) {
-      collector.file(path, ordinal);
-    }
-    int row = 0;
+    // Resolve BEFORE any collector is told this file exists, and refuse here rather than below.
     // Without the table's name mapping, a file that carries no field ids is resolved by column
     // POSITION, which indexes one column's values under another's id whenever a schema has ever
     // dropped or reordered a column. See DataFileIds.
     org.apache.iceberg.mapping.NameMapping mapping = io.kahshe.format.DataFileIds.mappingOf(table);
     org.apache.iceberg.io.InputFile input =
         IndexPaths.dataIo(table, config.format()).newInputFile(path);
-    // And a file carrying neither ids nor a mapping is refused rather than read positionally.
     io.kahshe.format.DataFileIds.requireResolvable(input, mapping);
+    // ORDER MATTERS, and it is invisible while the refusal above throws. A collector told about
+    // (path, ordinal) has taken an ordinal for this file, and the publish below turns every new
+    // path into a LIVE coverage entry at that ordinal. Refuse first and the file was never
+    // announced; refuse after and any future per-file tolerance would leave a covered entry
+    // holding nothing -- the file pruned for every term it actually contains. Today the build
+    // dies either way, so nothing observes this; it is ordered correctly so that the day
+    // something does, it is already right.
+    for (IndexType.Collector collector : collectors) {
+      collector.file(path, ordinal);
+    }
+    int row = 0;
     try (CloseableIterable<Record> records =
         io.kahshe.format.DataFileIds.withMapping(Parquet.read(input), mapping)
             .project(projection)

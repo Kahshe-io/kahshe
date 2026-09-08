@@ -38,6 +38,13 @@ dependencies {
     testFixturesImplementation("org.apache.iceberg:iceberg-data:1.11.0")
     testFixturesImplementation("org.apache.iceberg:iceberg-parquet:1.11.0")
     testFixturesImplementation("org.apache.parquet:parquet-column:1.17.1")
+    // Test only: writing a Parquet file with NO field ids, which is what add_files and a Hive
+    // migrate leave behind and what the refusal exists for. Iceberg's own writers always id
+    // their columns, so such a file cannot be produced through them. hadoop-client-api is here
+    // only so javac can resolve ExampleParquetWriter.builder's overloads; the test calls the
+    // OutputFile one. Both are already on the test runtime classpath, so neither adds a jar.
+    testImplementation("org.apache.parquet:parquet-hadoop:1.17.1")
+    testImplementation("org.apache.hadoop:hadoop-client-api:3.4.1")
     testFixturesImplementation("org.apache.hadoop:hadoop-common:3.4.1") {
         exclude(group = "org.apache.zookeeper")
         exclude(group = "org.apache.curator")
