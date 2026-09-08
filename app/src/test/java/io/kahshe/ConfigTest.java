@@ -33,6 +33,22 @@ class ConfigTest {
     }
   }
 
+  /**
+   * An operator sets this only to NARROW the instruction. Falling back to the permissive default
+   * on a typo would do the opposite of what they asked, and nothing would say so.
+   */
+  @Test
+  void anAdvertiseModeThatIsNotOneOfTheThreeIsRefused() {
+    assertEquals("all", Kahshe.Config.checkAdvertiseServerMode("all"));
+    assertEquals("indexed", Kahshe.Config.checkAdvertiseServerMode("indexed"));
+    assertEquals("none", Kahshe.Config.checkAdvertiseServerMode("none"));
+    for (String bad : new String[] {"Indexed", "INDEXED", "indexd", "true", ""}) {
+      IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+          () -> Kahshe.Config.checkAdvertiseServerMode(bad), bad);
+      assertTrue(e.getMessage().startsWith("KAHSHE_ADVERTISE_SERVER_MODE"), e.getMessage());
+    }
+  }
+
   @Test
   void aTokenCapOfZeroIsNotUnlimited() {
     assertThrows(IllegalArgumentException.class, () -> Kahshe.Config.tokenLength(0));

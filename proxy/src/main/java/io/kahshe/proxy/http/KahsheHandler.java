@@ -199,18 +199,17 @@ public final class KahsheHandler implements HttpHandler {
         planRoutes.noteObserved(
             tableMatch.group(1), tableMatch.group(2), tableMatch.group(3),
             Mutations.currentSnapshotId(responseBody));
-        Mutations.ServerPlanning planning =
-            Mutations.injectServerPlanning(responseBody, config.serveDeleteBearing());
+        Mutations.ServerPlanning planning = Mutations.injectServerPlanning(
+            responseBody, config.serveDeleteBearing(), config.advertiseServerMode());
         responseBody = planning.body();
         if (planning.injected()) {
           LOG.info("GET {} -> {} (injected scan-planning-mode=server)", path, backend.status());
         } else {
           metrics.serverPlanningDeclined.increment();
           LOG.info(
-              "GET {} -> {} (server planning NOT advertised: the snapshot is not provably "
-                  + "delete-free, so this client will plan locally. Compaction makes it "
-                  + "servable again; watch kahshe_server_planning_declined_total)",
-              path, backend.status());
+              "GET {} -> {} (server planning NOT advertised: {}, so this client will plan "
+                  + "locally; watch kahshe_server_planning_declined_total)",
+              path, backend.status(), planning.declinedBecause());
         }
       }
     }

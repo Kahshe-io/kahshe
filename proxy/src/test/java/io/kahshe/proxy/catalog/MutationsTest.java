@@ -2,6 +2,7 @@ package io.kahshe.proxy.catalog;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -115,6 +116,85 @@ class MutationsTest {
     assertTrue(out.injected(), "the opt-in must advertise, or the serving half is unreachable");
     assertEquals("server",
         MAPPER.readTree(out.body()).path("config").path("scan-planning-mode").asText());
+  }
+
+  private static final String INDEXED =
+      "{\"metadata\":{\"current-snapshot-id\":7,\"properties\":{\"kahshe.index\":\"msg\"},"
+          + "\"snapshots\":[{\"snapshot-id\":7,\"summary\":{\"total-delete-files\":\"0\"}}]}}";
+  private static final String UNINDEXED =
+      "{\"metadata\":{\"current-snapshot-id\":7,"
+          + "\"snapshots\":[{\"snapshot-id\":7,\"summary\":{\"total-delete-files\":\"0\"}}]}}";
+
+  private static Mutations.ServerPlanning advertise(String body, String mode) {
+    return Mutations.injectServerPlanning(body.getBytes(StandardCharsets.UTF_8), false, mode);
+  }
+
+  /**
+   * {@code indexed} narrows the MUST to the tables kahshe actually accelerates.
+   *
+   * <p>An unindexed table planned server-side reads exactly the files it would have read locally,
+   * so the only thing given up by skipping it is the manifest fetch. What is bought back is every
+   * client behaviour that a table saying "you MUST plan server-side" forecloses.
+   *
+   * <p>Verified by breaking it: ignoring the mode advertises to both bodies and fails the second
+   * assertion.
+   */
+  @Test
+  void indexedModeAdvertisesOnlyToTablesDeclaringAnIndex() throws Exception {
+    Mutations.ServerPlanning indexed = advertise(INDEXED, Mutations.ADVERTISE_INDEXED);
+    assertTrue(indexed.injected(), "a table declaring kahshe.index is what the mode is for");
+    assertEquals("server",
+        MAPPER.readTree(indexed.body()).path("config").path("scan-planning-mode").asText());
+
+    Mutations.ServerPlanning plain = advertise(UNINDEXED, Mutations.ADVERTISE_INDEXED);
+    assertFalse(plain.injected(), "no kahshe.index means nothing to accelerate, so no MUST");
+    assertTrue(MAPPER.readTree(plain.body()).path("config").path("scan-planning-mode").isMissingNode());
+  }
+
+  @Test
+  void allModeIsTheDefaultAndAdvertisesToBoth() throws Exception {
+    assertTrue(advertise(INDEXED, Mutations.ADVERTISE_ALL).injected());
+    assertTrue(advertise(UNINDEXED, Mutations.ADVERTISE_ALL).injected());
+    // The two-argument overload must keep meaning what it meant before the mode existed.
+    assertTrue(
+        Mutations.injectServerPlanning(UNINDEXED.getBytes(StandardCharsets.UTF_8), false).injected());
+  }
+
+  @Test
+  void noneModeAdvertisesToNothingAndDoesNotNeedToParseTheBody() {
+    assertFalse(advertise(INDEXED, Mutations.ADVERTISE_NONE).injected());
+    Mutations.ServerPlanning junk =
+        Mutations.injectServerPlanning(
+            "not json".getBytes(StandardCharsets.UTF_8), false, Mutations.ADVERTISE_NONE);
+    assertFalse(junk.injected());
+    assertEquals("KAHSHE_ADVERTISE_SERVER_MODE=none", junk.declinedBecause());
+  }
+
+  /** The two gates compose: narrowing never widens what the delete-bearing guard refuses. */
+  @Test
+  void indexedModeStillRefusesADeleteBearingIndexedTable() {
+    String deleteBearing =
+        "{\"metadata\":{\"current-snapshot-id\":7,\"properties\":{\"kahshe.index\":\"msg\"},"
+            + "\"snapshots\":[{\"snapshot-id\":7,\"summary\":{\"total-delete-files\":\"2\"}}]}}";
+    Mutations.ServerPlanning out = advertise(deleteBearing, Mutations.ADVERTISE_INDEXED);
+    assertFalse(out.injected());
+    assertEquals("the snapshot is not provably delete-free", out.declinedBecause());
+  }
+
+  /**
+   * KahsheHandler logs {@code declinedBecause} verbatim, so a wrong reason misdirects whoever is
+   * asking why a table is not being accelerated. Each refusal must name its own cause.
+   */
+  @Test
+  void eachRefusalNamesItsOwnCause() {
+    assertEquals(
+        "KAHSHE_ADVERTISE_SERVER_MODE=indexed and this table declares no kahshe.index",
+        advertise(UNINDEXED, Mutations.ADVERTISE_INDEXED).declinedBecause());
+    assertNull(advertise(INDEXED, Mutations.ADVERTISE_INDEXED).declinedBecause(),
+        "a table that was advertised to has no refusal to explain");
+    assertEquals(
+        "the LoadTableResponse could not be rewritten",
+        Mutations.injectServerPlanning("not json".getBytes(StandardCharsets.UTF_8)).declinedBecause());
   }
 
   @Test

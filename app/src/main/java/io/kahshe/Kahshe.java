@@ -15,6 +15,7 @@ import io.kahshe.indexer.maintain.IndexerService;
 import io.kahshe.proxy.http.AdminAuth;
 import io.kahshe.proxy.http.AdminHandler;
 import io.kahshe.proxy.catalog.BackendCatalogs;
+import io.kahshe.proxy.catalog.Mutations;
 import io.kahshe.proxy.http.Forwarder;
 import io.kahshe.proxy.http.KahsheHandler;
 import io.kahshe.proxy.plan.PlanService;
@@ -354,6 +355,10 @@ public final class Kahshe {
           // Whether to plan snapshots that carry delete files; refused by default. See
           // PlanService's guard for what the refusal protects and who can safely lift it.
           Boolean.parseBoolean(env("KAHSHE_SERVE_DELETE_BEARING", "false")),
+          // all (default), indexed or none: which tables are told they MUST plan server-side.
+          // Narrow it when a client cannot do something under that instruction; a table not
+          // advertised to still reads the same files, it just plans them itself.
+          checkAdvertiseServerMode(env("KAHSHE_ADVERTISE_SERVER_MODE", "all")),
           // 0 disables table caching entirely, which is what a multi-replica deployment needs.
           longEnv("KAHSHE_TABLE_CACHE_TTL_MS", 10_000),
           // strip (default) or requested: whether a plan response carries per-file column
@@ -462,6 +467,21 @@ public final class Kahshe {
       if (new InetSocketAddress(value, 0).isUnresolved()) {
         throw new IllegalArgumentException("KAHSHE_ADMIN_BIND=" + value
             + " does not resolve; give an interface address, 127.0.0.1, or 0.0.0.0");
+      }
+      return value;
+    }
+
+    /**
+     * The three tables-to-advertise-to modes, refused at startup rather than silently widened.
+     * An operator who sets this has set it to narrow the instruction; a typo that fell back to
+     * the permissive default would do the opposite of what they asked, quietly.
+     */
+    static String checkAdvertiseServerMode(String value) {
+      if (!value.equals(Mutations.ADVERTISE_ALL)
+          && !value.equals(Mutations.ADVERTISE_INDEXED)
+          && !value.equals(Mutations.ADVERTISE_NONE)) {
+        throw new IllegalArgumentException("KAHSHE_ADVERTISE_SERVER_MODE must be all, indexed or "
+            + "none (lowercase), not '" + value + "'");
       }
       return value;
     }
