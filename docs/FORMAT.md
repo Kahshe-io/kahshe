@@ -680,106 +680,178 @@ hook that releases every lease the process holds. Readers ignore it.
 
 ## 9. Relation to the Iceberg draft index spec
 
-**Read against apache/iceberg PR #16961 at head `551ef55` (2026-09-03).** The draft moves
-weekly and renamed four things in the three days before that revision, so this section is
-dated rather than written as though it tracks a moving document. Re-read it before relying
-on it.
+**Read against apache/iceberg PR #16961 at head `4365427042` (2026-09-08), the merged
+`format/expressions-spec.md` at `af86b839`, and the design doc's "Iceberg Index Support Sync" tab
+as of 2026-09-08.** The draft moves weekly — four things were renamed in the three days before
+`551ef55`, and `identity-fields` replaced the whole identity-expression model five days later — so
+this section is dated rather than written as though it tracks a moving document. Re-read it before
+relying on it. Citations `index-spec:N` are line numbers at that head.
 
 The hardest conflict is not a name, and it comes first:
 
-- **The draft requires an index snapshot to be complete.** Goal: "Each index snapshot will
-  index exactly the live rows of one source table snapshot"; normative: "An index snapshot
-  must index exactly the live rows of the referenced table snapshot." That forbids §5.7's
-  partial publication, §4.2's `from-ordinal`, and the whole coverage model of §5.3 — the
-  operating mode that lets a 48 GiB corpus be indexed in stages over 3h22m and be *useful*
-  while it is incomplete, because a file outside coverage is KEPT. Nothing about this is a
-  detail of ours: no index over a large table can be atomic with a table commit, and the
-  draft has no answer yet. It is the one thing worth raising upstream (§9.2).
+- **The draft requires an index snapshot to be complete.** Its Consistency goal
+  (`index-spec:34`) and its normative rule (`index-spec:199`) both say an index snapshot indexes
+  "exactly the live rows" of one table snapshot. That forbids §5.7's partial publication, §4.2's
+  `from-ordinal`, and the whole coverage model of §5.3 — the operating mode that lets a 48 GiB
+  corpus be indexed in stages over 3h22m and be *useful* while it is incomplete, because a file
+  outside coverage is KEPT. Nothing about this is a detail of ours: no index over a large table can
+  be atomic with a table commit, and the draft has no answer yet. Its only concession is at
+  snapshot granularity — an async index "may lag behind the table" and engines must reconcile
+  (`index-spec:263-264`) — never at file granularity. It is the one thing worth raising upstream
+  (§9.2).
 
 Also divergent:
 
-- `type` is `"term-dictionary"` / `"ngram-bloom"`. The draft defines `SCALAR` and reserves
-  `VECTOR`; it names "text/term indexes" only in its Future Extensions appendix.
-- Index fields in the draft are **Iceberg value expressions** — "Each index field is produced
-  by evaluating an [Iceberg value expression] for an indexed row of the source table". The
-  earlier `transform-function` / `key-column-ids` vocabulary this document once aligned to is
-  gone from the draft entirely, and the expression model won a settled argument at the
-  2026-08-17 sync. kahshe keys by field id.
-- One snapshot per document. This used to be alignment and is not any more: the draft dropped
-  the one-to-one requirement on 2026-09-03, and now allows several index snapshots per source
-  snapshot, an engine picking any match.
-- The document is a mutable fixed path. The draft has a `metadata-log` and requires an atomic
-  swap that "must succeed only if the current metadata file is still the file the writer
-  started from, identified by name" — a positive feature kahshe lacks, and one that would
-  replace the 12-hour build lease outright rather than sit beside it.
-- The draft's tracking file (`tracking-file`, renamed from `index-data` on 2026-09-03; its
-  `range-files` renamed from `leaf-files` on 2026-09-01) is collapsed here into inline leaf
-  lists.
+- `type` is `"term-dictionary"` / `"ngram-bloom"`. The draft's type table defines `SCALAR` and
+  reserves `VECTOR` (`index-spec:88-94`); text indexes appear only in its Future Extensions
+  appendix (`index-spec:466`). The design doc is *not* consistent with its own PR here: it names
+  TERM as a first-class type in its definitions and twice in its metadata tables, and the sync
+  agenda lists Bloom, BTree, Term and IVF-PQ. Whether to reserve names for expected future types
+  was put on the 2026-07-20 agenda and never answered in the notes. §9.2 asks for the table to be
+  made consistent, which is a smaller ask than it looks.
+- **One snapshot per document.** Recorded here as alignment until this re-read, wrongly: the
+  draft dropped the one-to-one requirement on 2026-09-03, at `551ef55` itself — the very head the
+  previous revision of this section cited — and allows several index snapshots per source snapshot,
+  an engine picking any match (`index-spec:210-212`). Ours is one, `snapshot-id` always
+  `1`, with `source-table-snapshot-id` carrying the meaning (§2).
+- **The document is a mutable fixed path.** The draft writes a new metadata file per update, keeps
+  a `metadata-log` of the ones it replaced (`index-spec:214-224`), and commits by a swap that
+  succeeds only if the current file is the one the writer started from, identified by name
+  (`index-spec:253-255`). That is a positive feature we lack, and it would replace the 12-hour
+  build lease (§8.6) outright rather than sit beside it.
+- **The tracking file.** The draft interposes one tracking file per index snapshot, listing range
+  files with per-file statistics (`index-spec:287-309`); we collapse that into inline leaf lists
+  (§5.2). Note the names are still open upstream: as of 2026-08-31 the sync had four candidate
+  vocabularies on the table, including "Index root manifest, index data file".
+- **Clustering.** The draft requires a non-empty `cluster-spec` and non-overlapping clustering
+  ranges, one per range file, with an exact never-rounded `group_max_value` per cluster field
+  (`index-spec:151-156`, `270-273`, `328-337`). We have no cluster spec and no per-leaf bounds;
+  our 36 term ranges (§5.4) achieve the same pruning by being contiguous and monotonic in unsigned
+  byte order, decided by a term's first byte.
+- **`transform-function` and `key-column-ids` are vestigial.** Both are gone from the draft
+  entirely — zero occurrences at this head. We still write them (§2). `key-column-ids` is what the
+  draft now calls `identity-fields`; `transform-function` has no successor, and our bloom
+  document's `"HASH"` describes that tier's own hashing (§3.4), never a clustering transform in the
+  draft's sense. Read them as history, not as claims.
 - The structured extensions (`files` / `leaf-files`, `leaves`, `totals`, `terms-per-range`,
-  `gram-coverage`, `files-covered`, `data-bytes`, `index-bytes`) are extra keys in
-  `snapshots[0]`, not under `properties`.
+  `gram-coverage`, `files-covered`, `data-bytes`, `index-bytes`) are extra keys in `snapshots[0]`,
+  not under `properties`.
+
+Newly aligned, and worth stating because §9 previously said the opposite:
+
+- **The draft is keyed by field id.** On 2026-09-08 it replaced the identity-expression model with
+  `identity-fields`, a required non-empty `list<int>` of source table field IDs
+  (`index-spec:131-136`, `174`). Expressions may reference only IDs — "Named references must not be
+  used" (`index-spec:119-120`) — and readers must match range file columns by field ID, never by
+  writer-generated name (`index-spec:357-358`). That is structurally our `key-column-ids`, and it
+  is why §1's field-id directories and §6's rule that a builder must never resolve columns by
+  position are the right shape. This is our strongest alignment with the draft.
+- **Containment already has a sanctioned spelling.** See §9.2, item 3.
+
+**We are not the discarded "one index file per data file".** The design doc discards a family of
+file-level index layouts, the first of which is storing one-to-one index files alongside data
+files; the stated objection is that modern file formats already embed such indexes, so the
+one-to-one form buys nothing but extra blob-store access. Our object count is O(columns × tiers)
+and independent of the table's file count: one bloom leaf holding one *row* per data file, merged
+once eight accumulate (§3.2); one gram leaf; up to 36 term aggregate leaves (§5.5). A query opens
+one artifact per column, not one per file. The nearest thing the doc discarded is aggregating
+per-file indexes into Puffin files, rejected because it would require significant changes to
+Iceberg's metadata structure — a cost we do not incur, because nothing here is referenced from
+table metadata at all (§9.1). What the doc never evaluated is the file-ordinal indirection itself
+(§5.3): its "index row identifiers" discussion weighs RowId against filename+position against
+user-defined primary keys and leaves the choice to the user, and the draft's own Appendix B
+(`index-spec:474-492`) restates that same menu. An index-local ordinal resolved through a coverage
+table is a fifth option, and nobody upstream has proposed it.
 
 Still aligned: the envelope's field names, `format-version` = 1, string-valued extension data
-under `properties`, and refusal of a newer version.
+under `properties`, refusal of a newer version, and the reader obligation — the draft's rule that
+an unimplemented index type must be ignored rather than failed (`index-spec:93-94`) is the one
+discipline we share, and §7's advisory keep is a strict superset of it.
 
 ### 9.1 Where it lives, relative to Puffin and the catalog
 
-Nothing here is stored in the catalog, and nothing here is a Puffin file. Iceberg's catalog
-holds the pointer to a table's current metadata file; every artifact the table owns — data,
-manifests, Puffin statistics and deletion-vector files — lives in storage and is reached
-through that metadata. kahshe sits in the same place: Parquet leaves and JSON documents under
+Nothing here is stored in the catalog, and nothing here is a Puffin file. Iceberg's catalog holds
+the pointer to a table's current metadata file; every artifact the table owns — data, manifests,
+Puffin statistics and deletion-vector files — lives in storage and is reached through that
+metadata. kahshe sits in the same place: Parquet leaves and JSON documents under
 `<table location>/_index` (or a configured root, §1), reached by convention — the field-id
 directories under the root — with the table's own metadata untouched.
 
-**Puffin could hold these artifacts today.** That was tested, not assumed: a Puffin file
-carrying `kahshe-term-v1` and `kahshe-ngram-bloom-v1` blobs beside a real theta blob writes
-and reads back byte-exact under Iceberg 1.11.0, with a Parquet payload nested whole inside a
-blob. The container is deliberately permissive — "A Puffin file contains arbitrary pieces of
-information", `type` is an unconstrained JSON string — and its stated purpose names indexes.
-Storage was never this format's constraint: the ClickBench artifact is ~1.3% of table bytes.
+**Puffin could hold these artifacts today.** That was tested, not assumed: a Puffin file carrying
+`kahshe-term-v1` and `kahshe-ngram-bloom-v1` blobs beside a real theta blob writes and reads back
+byte-exact under Iceberg 1.11.0, with a Parquet payload nested whole inside a blob. The container
+is deliberately permissive — it holds "arbitrary pieces of information", `type` is an unconstrained
+JSON string — and its stated purpose names indexes. Storage was never this format's constraint:
+the ClickBench artifact is ~1.2% of table bytes (term 0.84%, bloom 0.33%).
 
-What Puffin does not supply is a **reader obligation**. The word "reader" does not occur in
-its 198 lines: there is no rule that an implementation must skip a blob type it does not know.
-So a private blob type is safe to write and guaranteed nothing on read — while the index draft
-does supply exactly that discipline ("A reader that does not implement an index type must
-ignore the index and read the source table directly; it must not fail"). That asymmetry, not
-storage, is why this format is not a Puffin file. Three further consequences are recorded in
-§9.2.
+What Puffin does not supply is a **reader obligation**. The word "reader" does not occur in its
+198 lines: there is no rule that an implementation must skip a blob type it does not know. So a
+private blob type is safe to write and guaranteed nothing on read — while the index draft does
+supply exactly that discipline (`index-spec:93-94`). That asymmetry, not storage, is why this
+format is not a Puffin file. Three further consequences are recorded in §9.2.
 
-Note that "the draft does not use Puffin" is true of PR #16961 only, and is not a settled
-community position: a parallel design doc for file-skipping bloom indexes proposes storing
-them *in* Puffin and has never been retracted — its PR simply went stale.
+Note that "the draft does not use Puffin" is true of PR #16961 only — Puffin appears nowhere in it
+— and is not a settled community position. The design doc considered and set aside Puffin-specific
+index layouts as complicating generic handling, while keeping Puffin available as a
+property-referenced side channel, and a parallel design for file-skipping bloom indexes proposes
+storing them *in* Puffin and has never been retracted; its PR simply went stale.
 
-How a table refers to its indexes is deferred by the draft to the **catalog** specification,
-not the REST spec ("How the indexes of a table are discovered is out of scope for this
-specification and is defined by the catalog specification"), and the REST work is currently
-dead: the PR adding index endpoints was auto-closed for inactivity on 2026-08-10 with nothing
-replacing it. kahshe's convention-based `_index` root therefore has no live upstream
-competitor.
+How a table refers to its indexes is deferred by the draft to the **catalog** specification, not
+the REST spec — discovery is out of scope for the index spec (`index-spec:191-192`), and index
+names are not stored in index metadata at all but are the catalog's to map (`index-spec:189-190`).
+The REST work is dead: PR #16963, which would have added the index endpoints, was closed for
+inactivity on 2026-08-10 with nothing replacing it, and the only implementation attempt against
+the spec, PR #17426, closed on 2026-09-05. Our convention-based `_index` root therefore has no
+live upstream competitor. It has one real cost, and it is operational rather than formal:
+`remove_orphan_files` will delete an index root that sits inside the table location, because
+nothing in table metadata references it.
 
 ### 9.2 What kahshe would ask the standard for
 
-Recorded here because the questions are the format's, not the product's, and because the
-answers would change this document. Ranked by value against effort; the case for each is a
-scale argument rather than a kahshe argument.
+Recorded here because the questions are the format's, not the product's, and because the answers
+would change this document. Ranked by value against effort; the case for each is a scale argument
+rather than a kahshe argument.
 
-1. **Reserve a `TERM` index type** in the draft's type table, beside `SCALAR` and `VECTOR`.
-   The draft's own Future Extensions appendix already names "text/term indexes"; this only
-   makes the table consistent with it, and reserving a name costs nothing and prevents a
-   collision.
-2. **Admit partial coverage** — relax "must index exactly the live rows" to allow a declared
-   coverage set, with files outside it always kept. No prior art exists anywhere in the
-   project, which is itself the finding. The cost is real and lands on readers: every pruning
-   decision needs a coverage check before it is trusted.
-3. **A portable spelling for containment.** Equality, `IN`, prefix and string ranges already
-   reach stock engines; token and substring containment over an analyzed column has no
-   standard form, which is why the Trino overlay exists. The sanctioned route is the
-   expressions spec's function mechanism — `eq(apply(<fn>, ref, lit), true)` is already
-   schema-valid — not a new expression operation, which the design doc rules out.
+1. **Reserve a `TERM` index type** in the draft's type table, beside `SCALAR` and `VECTOR`. The
+   design doc names TERM as a first-class type in its definitions and in both of its metadata
+   tables, the sync agenda lists it among the proposed index types, and the PR's own Future
+   Extensions appendix anticipates text indexes; the type table carries none of them. Whether to
+   reserve names for expected future types was raised on the 2026-07-20 agenda and is unanswered
+   in the notes. Reserving a name costs nothing and prevents a collision.
+2. **Admit partial coverage** — relax the "exactly the live rows" rule (`index-spec:199`) to allow
+   a declared coverage set, with files outside it always kept. No prior art exists anywhere in the
+   project, which is itself the finding: the nearest the record comes is an open question about
+   whether deletes may be deferred to the next full rebuild, leaving the index with stale entries.
+   A coverage set is not usable without a matching reader rule. A reader must check coverage before
+   trusting the index to eliminate anything; absent that rule, "absent from the index" reads as
+   "prune", which drops rows with no error and no metric. The draft has exactly one reader
+   obligation today, about unknown index types (`index-spec:93-94`), and no place to put a second.
+   The cost is real and lands on readers; we already pay it (§7, rule 1).
+3. **A portable spelling for containment — largely already answered.** Predicates in the merged
+   expressions spec are a closed set with no containment operation and no extension point, but a
+   boolean function compared to a literal *is* a valid predicate: the spec's own example is that
+   `is_empty(str_col)` is not a predicate while comparing it to true is (`expressions-spec:114`).
+   Vendor function catalogs are the documented pattern, not a workaround — `sql_functions` and
+   `iceberg_functions` are reserved, and engines may name their own (`expressions-spec:87-92`).
+   The community settled on 2026-08-17 that the functions usable in index expressions are not
+   restricted, with engines free to ignore an expression they do not understand. So
+   `eq(apply(kahshe_functions.match, ref, lit), true)` is already schema-valid, already idiomatic,
+   and already consistent with the settled position; we honour the reserved `iceberg_functions`
+   spelling on read for older callers and never emit it (ENDPOINTS.md §2). What remains is not a
+   spec gap: iceberg-java 1.11.0's `ExpressionParser` cannot serialize `apply`, which is why the
+   sentinel spelling exists. That is a code problem, and no wording upstream fixes it. The one
+   thing left to ask for is a standard *name*, if one is ever minted, so `text_match` and `match`
+   do not diverge across implementations.
 4. **One sentence in the Puffin spec**: a reader that does not recognise a blob's `type` must
-   ignore it and must not fail. It codifies what every implementation already does, and it is
-   what would make a private blob type safe to write.
-
+   ignore it and must not fail. It codifies what every implementation already does, and it is what
+   would make a private blob type safe to write.
+5. **Add the file ordinal to the source-row-pointer menu.** The draft's Appendix B lists
+   `_file`+`_pos`, `_row_id`, `_file` alone, or nothing (`index-spec:474-492`), and the design doc
+   is explicit that the choice is left to the user. An index-local dense ordinal per data file,
+   resolved through a table the index carries, belongs on that list: it makes postings compressible
+   as bitmaps rather than repeated path strings, and it lets an index renumber after files are
+   removed by translating bitmaps in one pass instead of rewriting every entry (§5.3). It suits
+   file-eliminating indexes and is irrelevant to row-returning ones.
 ## 10. Unsettled
 
 Facts an implementer should not assume because the code does not pin them:
