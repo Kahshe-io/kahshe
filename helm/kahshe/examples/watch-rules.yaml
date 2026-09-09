@@ -63,3 +63,30 @@ rules:
       - { column: user_agent, re: ["^curl/[0-6]\\."] }
     condition: all-of
     min_count: 1
+
+  # Window form: a rate, not a match. The count is over rows ACROSS files —
+  # three 404s from one client within an hour routinely arrive in three of
+  # them — so this is the one shape a per-file count cannot answer, and it
+  # makes the scan of this table sequential and ordered by the ts column.
+  # group_by is optional: without it every matching row counts together.
+  # `min_count` and `window` in one rule are refused, because one counts
+  # within a file and the other over time. The alert's confirmation_sql is
+  # the grouped count over the whole table, and its time bound is a literal
+  # rendered from the ts column's KIND — a wall-clock TIMESTAMP for a
+  # zone-less column, the same instant marked UTC for a timestamptz one, a
+  # DATE, raw epoch millis, or ISO-8601 text — since an expression like
+  # from_unixtime() is zoned and would move the window into the reader's
+  # session zone, where the same alert confirms in London and returns
+  # nothing in New York.
+  - id: client-404s
+    title: Repeated 404s from one client
+    severity: medium
+    prefix: lakehouse
+    table: logs.events
+    where:
+      - { column: status, equals: [404] }
+    window:
+      ts_column: ts            # which column carries event time; never guessed
+      timeframe: 1h            # 500ms | 30s | 5m | 2h | 1d
+      group_by: [clientip]     # optional; absent counts every matching row together
+      count: 3                 # at least 2 — one is a rule without a window

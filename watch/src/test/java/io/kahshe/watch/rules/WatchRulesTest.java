@@ -429,7 +429,8 @@ class WatchRulesTest {
     Metrics metrics = new Metrics();
     List<WatchRule> loaded = new WatchRules(example.toString(), metrics).current();
     assertEquals(0, metrics.watchRulesSkipped.sum(), "the shipped example must not skip a rule");
-    assertEquals(4, loaded.size(), "two single-column rules, one detection rule, one where rule");
+    assertEquals(5, loaded.size(),
+        "two single-column rules, one detection rule, one where rule, one window rule");
   }
 
   /**
