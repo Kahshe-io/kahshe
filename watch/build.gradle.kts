@@ -16,6 +16,10 @@ dependencies {
     implementation("org.apache.iceberg:iceberg-data:1.11.0")
     implementation("org.apache.iceberg:iceberg-parquet:1.11.0")
     implementation("org.apache.parquet:parquet-column:1.17.1")
+    // HuntPass asks a term's file bitmap whether it holds an ordinal, the same question
+    // TermIndexType.pruneByTerms asks; the bitmap type is the format's, declared here as the
+    // indexer and the proxy declare it.
+    implementation("org.roaringbitmap:RoaringBitmap:1.3.0")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.21.3")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.21.3")
     implementation("org.slf4j:slf4j-api:2.0.13")

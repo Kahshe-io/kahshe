@@ -40,6 +40,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import io.kahshe.format.type.term.TermIndex;
+import io.kahshe.watch.scan.HuntPass;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.slf4j.Logger;
@@ -97,6 +99,69 @@ public final class Kahshe {
                   config.proxy().backendBase(),
                   IndexPaths.root(table, config.format().indexRoot())))
               .toPrettyString());
+      return;
+    }
+    if (args.length > 0 && "hunt".equals(args[0])) {
+      // A trailing `--out <path>` writes the result set as JSON lines; the summary still prints.
+      boolean toFile = args.length >= 3 && "--out".equals(args[args.length - 2]);
+      String outPath = toFile ? args[args.length - 1] : null;
+      final String[] a = toFile ? java.util.Arrays.copyOf(args, args.length - 2) : args;
+      boolean byRule = a.length == 3 && "--rule".equals(a[1]);
+      if (!byRule && a.length != 5) {
+        System.err.println(
+            "usage: kahshe hunt <prefix> <namespace.table> <column> <term> [--out <file.jsonl>]");
+        System.err.println(
+            "       kahshe hunt --rule <id> [--out <file.jsonl>]      (from KAHSHE_WATCH_RULES)");
+        System.err.println("  exit 3: refused -- the index cannot answer this without approximating");
+        System.exit(2);
+      }
+      // One term, or one rule of the shape the index answers, over every data file the table
+      // holds, from the term index alone: the retroactive question the watcher's prospective
+      // paths cannot ask. Loads the table as the caller, reads the index the same way the proxy
+      // does, reads no data file, alerts nothing.
+      BackendCatalogs cliCatalogs = new BackendCatalogs(config.proxy());
+      Metrics cliMetrics = new Metrics();
+      HuntPass hunt = new HuntPass(new TermIndex(config.format(), cliMetrics));
+      try {
+        HuntPass.Partition result;
+        if (byRule) {
+          // The rule is the whole specification -- it names its prefix and table -- and it is
+          // read through the loader the watcher uses, so a rule this refuses is one the watcher
+          // would have refused too.
+          String rulesPath = config.watch().watchRulesPath();
+          io.kahshe.watch.rules.WatchRule rule =
+              new WatchRules(rulesPath, cliMetrics).current().stream()
+                  .filter(r -> r.id().equals(a[2]))
+                  .findFirst()
+                  .orElseThrow(() -> new HuntPass.Refused(
+                      "no rule '" + a[2] + "' loaded from KAHSHE_WATCH_RULES=" + rulesPath));
+          TableIdentifier ident = TableIdentifier.parse(rule.table());
+          Table table = cliCatalogs.load(rule.prefix(), ident);
+          result = hunt.hunt(table, rule).withConfirmationSql(
+              config.watch().watchSqlCatalog(), ident.namespace().toString(), ident.name());
+        } else {
+          TableIdentifier ident = TableIdentifier.parse(a[2]);
+          Table table = cliCatalogs.load(a[1], ident);
+          result = hunt.hunt(table, a[3], a[4]).withConfirmationSql(
+              config.watch().watchSqlCatalog(), ident.namespace().toString(), ident.name());
+        }
+        System.out.println(result.toJson().toPrettyString());
+        if (outPath != null) {
+          // The file is the deliverable; stdout is the glance. Written whole after the hunt
+          // returned, so a refusal leaves no half-written result behind.
+          try (java.io.Writer out = java.nio.file.Files.newBufferedWriter(
+              java.nio.file.Path.of(outPath))) {
+            result.writeJsonl(out);
+          }
+          System.err.println("wrote " + (1 + result.hit().size() + result.unresolved().size())
+              + " line(s) to " + outPath);
+        }
+      } catch (HuntPass.Refused e) {
+        // A refusal is the answer, not a crash: it says why, and a distinct exit code lets a
+        // script tell "refused" from "usage" without parsing the message.
+        System.err.println("refused: " + e.getMessage());
+        System.exit(3);
+      }
       return;
     }
     AtomicBoolean shuttingDown = new AtomicBoolean(false);

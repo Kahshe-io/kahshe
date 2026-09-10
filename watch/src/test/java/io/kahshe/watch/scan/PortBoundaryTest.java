@@ -50,6 +50,7 @@ class PortBoundaryTest {
       "io/kahshe/watch/TableDiscovery",
       "io/kahshe/watch/ReportPoller",
       "io/kahshe/watch/scan/ScanPass",
+      "io/kahshe/watch/scan/HuntPass",
       "io/kahshe/watch/scan/ProjectedRow");
 
   @Test

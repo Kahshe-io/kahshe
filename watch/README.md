@@ -243,8 +243,10 @@ out — raise the budget, shorten the timeframe, or accept the gap — and count
 
 ### The port: nothing above the reader names a table format
 
-`ScanPass` is the Iceberg reader, and it and its row adapter `ProjectedRow` are the only files in
-the evaluation path that name a table format. Above them, scanners see `TableView` (a name and each
+`ScanPass` is the Iceberg reader, and it, its row adapter `ProjectedRow`, and `HuntPass` — the
+other reader, which enumerates every file the table holds to answer one term over all of them from
+the term index — are the only files in the evaluation path that name a table format. Above them,
+scanners see `TableView` (a name and each
 top-level column's `ValueKind`), `FileScanContext` (the prefix, table, snapshot, path, replay flag,
 delete-bearing flag, column kinds, and the set of columns that hold many values per row) and `Row`
 (the value plus its canonical, lowercased and tokenized forms, derived lazily and memoized per

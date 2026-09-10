@@ -213,6 +213,64 @@ public final class ConfirmationSql {
     return sb.toString();
   }
 
+  /**
+   * The most files a hunt's confirmation pins by path before it drops the pin and scopes by
+   * snapshot alone. Above it a list is not truncated — a truncated list is a confirmation that
+   * quietly asks about a subset — it is left out.
+   */
+  public static final int PATH_PIN_MAX = 500;
+
+  /**
+   * A hunt's confirmation: the rule's condition over the files a matching row could be in — the
+   * hits, and the files the index never examined — on one snapshot. A miss is never pinned: the
+   * dictionary proved no row of it can match. So this is also the scan the hunt declined to do,
+   * handed to the operator's engine under the operator's own authorization: over the unresolved
+   * files the engine applies the real predicate row by row, and the gap the index left closes at
+   * the engine's cost rather than kahshe's.
+   *
+   * <p>Under {@link #PATH_PIN_MAX} files the pin is {@code "$path" IN (...)}; the lab recorded
+   * that {@code $path} equality prunes splits, and {@code IN} is its list form. Above it the pin
+   * is dropped and the query scopes by snapshot alone — slower, complete, and Iceberg's own
+   * min/max pruning still applies. The condition is the same tree compiler the per-file alert and
+   * the window use, so the three cannot disagree about what the rule means.
+   *
+   * @param paths the hit and unresolved files, in the caller's order; never empty — a hunt with
+   *     no candidate file has no row to confirm and carries no SQL
+   * @throws IllegalArgumentException on an empty {@code paths}, rather than emitting
+   *     {@code IN ()} — which is not SQL — or a query over the whole table for a hunt that proved
+   *     there is nothing to find
+   */
+  public static String hunt(
+      String catalog,
+      String namespace,
+      String table,
+      long snapshotId,
+      List<String> paths,
+      List<WatchRule.Field> fields,
+      Set<String> numericColumns,
+      WatchRule.Expr expr) {
+    if (paths.isEmpty()) {
+      throw new IllegalArgumentException(
+          "no hit and no unresolved file: no row can match, so there is nothing to confirm");
+    }
+    StringBuilder sb = new StringBuilder("SELECT * FROM ");
+    sb.append(catalog).append('.').append(ident(namespace)).append('.').append(ident(table));
+    sb.append(" FOR VERSION AS OF ").append(snapshotId);
+    sb.append(" WHERE ");
+    if (paths.size() <= PATH_PIN_MAX) {
+      sb.append("\"$path\" IN (");
+      for (int i = 0; i < paths.size(); i++) {
+        if (i > 0) {
+          sb.append(", ");
+        }
+        sb.append(literal(paths.get(i)));
+      }
+      sb.append(") AND ");
+    }
+    sb.append('(').append(condition(expr, fields, numericColumns, true)).append(')');
+    return sb.toString();
+  }
+
   private static final DateTimeFormatter UTC_LITERAL =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
   private static final DateTimeFormatter UTC_DATE =

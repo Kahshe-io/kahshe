@@ -8,8 +8,10 @@ import java.util.Locale;
 
 /**
  * One validated watch rule: a table, a list of field predicates over its columns, and a condition
- * joining them. Rules are prospective only — evaluated against data files as they arrive, never
- * retroactively.
+ * joining them. The watcher evaluates rules prospectively, against data files as they arrive; a
+ * rule of the shape {@link #ridesIndex} admits, less {@code contains} and {@code min_count}, can
+ * also be asked over every file the table already holds by {@code kahshe hunt}, from the term
+ * index alone ({@code io.kahshe.watch.scan.HuntPass}).
  *
  * <p>A rule is a list of {@link Field}s because a detection is a conjunction across columns, not a
  * predicate on one. The single-column YAML form is the case where every field names the same
@@ -254,17 +256,44 @@ public record WatchRule(
    * scan instead — never half-evaluated.
    */
   public boolean ridesIndex() {
+    return whyNotRidesIndex() == null;
+  }
+
+  /**
+   * Why {@link #ridesIndex} is false, or null when it is true — the one statement of the shape,
+   * so a reader that must SAY why it refused a rule ({@code kahshe hunt}) reads the same clauses
+   * the boolean does rather than a second copy that can drift from it. The first failing clause
+   * is named; the order is the boolean's.
+   */
+  public String whyNotRidesIndex() {
     // A window rule never rides the index: the index answers "some file holds this token", and a
     // rate rule answered that way fires on the FIRST match -- "N within T" demoted to "ever".
+    if (window != null) {
+      return "a window rule: the index says a token is somewhere in a file, and 'N within T' "
+          + "answered per file is 'ever'";
+    }
+    if (column() == null) {
+      return "spans columns " + columns() + ": the index sees one column at a time";
+    }
+    for (Field field : where) {
+      if (field.op() != Op.MATCH && field.op() != Op.CONTAINS) {
+        return "operator " + field.op().yaml() + " on " + field.column()
+            + ": no index tier decides it";
+      }
+    }
+    if (!Expr.isFlat(expr, condition, where.size())) {
+      return "a condition that is not a flat any-of or all-of over its fields (a not, a nesting, "
+          + "or a detection expression): the index has no evidence for a field's absence in a row";
+    }
     // Otherwise only a shape whose FILE-level answer is its ROW-level answer. OR commutes with
     // "some row has": a file with a somewhere or b somewhere has a row matching a or b. AND does
     // not: a row with a and a row with b is not a row with both, so all-of over two or more fields
     // is the row scan's.
-    return window == null
-        && column() != null
-        && where.stream().allMatch(f -> f.op() == Op.MATCH || f.op() == Op.CONTAINS)
-        && Expr.isFlat(expr, condition, where.size())
-        && (where.size() == 1 || condition == Condition.ANY_OF);
+    if (where.size() > 1 && condition == Condition.ALL_OF) {
+      return "all-of over " + where.size() + " fields: a file holding each token somewhere is not "
+          + "a row holding all of them";
+    }
+    return null;
   }
 
   /** The MATCH tokens, flattened in rule order. */

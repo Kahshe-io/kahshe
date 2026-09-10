@@ -36,6 +36,36 @@ suppression, so a rule both paths can answer alerts once.
 **Rules are prospective.** Files written before a rule existed are not re-examined, and the first
 poll of a table starts at its current snapshot rather than walking its history.
 
+**A term is not.** `kahshe hunt <prefix> <ns.table> <column> <term>` evaluates one token over
+every data file the table holds, from the term index alone and with no data read — the question a
+new indicator raises, "were we already hit?". Each live file is a `hit` (the dictionary holds it),
+a `miss` (the dictionary proves it absent) or `unresolved` (outside the index's coverage: not
+examined, and reported as such rather than folded into either answer). It refuses, naming the
+reason and exiting 3, wherever the plan path would keep every file: an unknown column, a column
+with no term index, a value that is not one token the index's analyzer admits, an unreadable leaf.
+It never alerts, so it never claims a (rule, file) the live watcher has yet to reach.
+
+`kahshe hunt --rule <id>` asks the same of a rule from `KAHSHE_WATCH_RULES`: a `match` rule on one
+column, one field or `any-of` over several — the shape `WatchRule.ridesIndex` admits, and the
+refusal for any other shape is the reason that method gives (`whyNotRidesIndex`), so the hunt and
+the watcher cannot disagree about what the index can answer. Each file's verdict goes through the
+same condition interpreter the watcher uses. Two shapes that ride a build are refused on top:
+`contains` (the gram tier's verdict is advisory, and on identifier-dense text every file holds
+every gram) and `min_count` above one (the dictionary records which files hold a term, not how
+many times each). A trailing `--out <file.jsonl>` writes the result set: one `summary` record —
+what was asked, of which table and column, the snapshot, the analyzer, the counts — then one
+`file` record per hit and per unresolved file with its verdict. A miss needs no action, so it is
+counted and not listed. It is a file an analyst keeps, not an alert: nothing goes through a sink.
+
+The summary carries a `confirmation_sql`, in the same dialect and from the same condition compiler
+as an alert's, snapshot-scoped and pinned with `"$path" IN (...)` to the hits **and the unresolved
+files** — the only files a matching row can be in. Over the unresolved files the engine applies
+the real predicate row by row, so the query is also the scan the hunt declined: the gap the index
+left closes at the engine's cost, under the operator's own authorization. A miss is never pinned.
+Past 500 candidate files the pin is dropped rather than truncated, and the query scopes by snapshot
+alone. No hit and no unresolved file means no query at all. The `exact`/`advisory` confidence label
+on a delete-bearing snapshot and an in-process scan of `unresolved` are not built yet.
+
 **Dead rules are never silent.** A rule naming a column the table's **schema** does not have
 cannot fire anywhere: kahshe logs it (rate-limited, naming the column) and gauges it
 (`kahshe_watch_rules_uncovered`). Index coverage is not that condition — an unindexed column is
