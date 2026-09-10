@@ -257,6 +257,42 @@ public final class LocalTableFixture {
     return path;
   }
 
+  /**
+   * Commits a POSITION DELETE of one row of {@code dataFilePath}, making the current snapshot
+   * delete-bearing ({@code total-delete-files} &gt; 0) without changing the data file set.
+   *
+   * <p>The one thing no other fixture here can produce. Every reader in this project reads raw
+   * data files and applies no delete file, so its counts on a merge-on-read snapshot are upper
+   * bounds and its evidence says {@code advisory} rather than {@code exact}; until this existed,
+   * that label could be tested only against a hand-made {@code Snapshot} summary, never against
+   * a table that really carries a delete. Needs a format-v2 table, which is what
+   * {@code HadoopTables.create} makes by default.
+   *
+   * @return the delete file's path
+   */
+  public static String appendPositionDelete(Table table, String dataFilePath, long position)
+      throws IOException {
+    String path = table.location() + "/data/delete-" + position + "-"
+        + Integer.toHexString(dataFilePath.hashCode()) + ".parquet";
+    Schema deleteSchema = org.apache.iceberg.io.DeleteSchemaUtil.pathPosSchema();
+    org.apache.iceberg.deletes.PositionDeleteWriter<Record> writer =
+        // withSpec, not forTable: forTable also adopts the table's schema as the delete's ROW
+        // schema, which makes the Parquet schema (file_path, pos, row) and asks for a row this
+        // fixture does not carry. The two-column path-and-position form is the whole point.
+        Parquet.writeDeletes(table.io().newOutputFile(path))
+            .withSpec(table.spec())
+            .createWriterFunc(type -> GenericParquetWriter.create(deleteSchema, type))
+            .overwrite()
+            .buildPositionWriter();
+    try (writer) {
+      org.apache.iceberg.deletes.PositionDelete<Record> delete =
+          org.apache.iceberg.deletes.PositionDelete.create();
+      writer.write(delete.set(dataFilePath, position, null));
+    }
+    table.newRowDelta().addDeletes(writer.toDeleteFile()).commit();
+    return path;
+  }
+
   public static BuildConfig config() {
     return config(true);
   }

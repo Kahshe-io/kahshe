@@ -63,8 +63,16 @@ files** — the only files a matching row can be in. Over the unresolved files t
 the real predicate row by row, so the query is also the scan the hunt declined: the gap the index
 left closes at the engine's cost, under the operator's own authorization. A miss is never pinned.
 Past 500 candidate files the pin is dropped rather than truncated, and the query scopes by snapshot
-alone. No hit and no unresolved file means no query at all. The `exact`/`advisory` confidence label
-on a delete-bearing snapshot and an in-process scan of `unresolved` are not built yet.
+alone. No hit and no unresolved file means no query at all.
+
+The summary also says what its evidence may claim. `confidence` is `exact` on a snapshot proven to
+carry no delete files and `advisory` otherwise, by the rule in [§8](#8-merge-on-read-tables): the
+index counted raw rows, so on a merge-on-read snapshot a hit is a file that held the term, not one
+that still returns it, and the confirmation SQL may come back empty — that is the deletes, not a
+false positive. `occurrences` gives each probed token's total across every covered file, and is
+present only while the index's counts are exact ([FORMAT.md §5.6](FORMAT.md)): after a file has
+left the table the total is an upper bound, so the field is omitted and `counts_exact: false` says
+why. An in-process scan of `unresolved` is not built yet.
 
 **Dead rules are never silent.** A rule naming a column the table's **schema** does not have
 cannot fire anywhere: kahshe logs it (rate-limited, naming the column) and gauges it

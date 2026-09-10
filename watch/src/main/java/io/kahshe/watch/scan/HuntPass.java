@@ -97,6 +97,13 @@ public final class HuntPass {
    *     ({@code counts-exact}, FORMAT.md §5.6); a consumer that prints counts must refuse when
    *     this is false
    * @param partial whether the index is a checkpoint over part of the build's files (§5.7)
+   * @param confidence {@code exact} on a snapshot PROVEN to carry no delete files, {@code advisory}
+   *     otherwise — the same rule the watcher's two paths apply. The index reads raw data files and
+   *     applies no delete, so on a merge-on-read snapshot a hit file may hold only rows the engine
+   *     no longer returns, and the confirmation SQL, which does apply the deletes, may return none
+   * @param occurrences per probed token, how many times it occurs across every covered file — the
+   *     dictionary's {@code total_count} — present only when the index's counts are exact
+   *     ({@code counts-exact}, FORMAT.md §5.6); absent rather than an upper bound labelled a count
    */
   public record Partition(
       String table,
@@ -113,9 +120,12 @@ public final class HuntPass {
       long indexSnapshotId,
       String analyzer,
       boolean countsExact,
-      boolean partial) {
+      boolean partial,
+      String confidence,
+      Map<String, Long> occurrences) {
     public Partition {
       terms = List.copyOf(terms);
+      occurrences = occurrences == null ? null : Map.copyOf(occurrences);
       fields = List.copyOf(fields);
       hit = List.copyOf(hit);
       miss = List.copyOf(miss);
@@ -144,7 +154,7 @@ public final class HuntPass {
           : ConfirmationSql.hunt(
               catalog, namespace, tableName, snapshotId, candidates, fields, Set.of(), expr);
       return new Partition(table, column, terms, rule, fields, expr, sql, hit, miss, unresolved,
-          snapshotId, indexSnapshotId, analyzer, countsExact, partial);
+          snapshotId, indexSnapshotId, analyzer, countsExact, partial, confidence, occurrences);
     }
 
     /**
@@ -167,6 +177,11 @@ public final class HuntPass {
       node.put("analyzer", analyzer);
       node.put("counts_exact", countsExact);
       node.put("partial", partial);
+      node.put("confidence", confidence);
+      if (occurrences != null) {
+        ObjectNode counts = node.putObject("occurrences");
+        occurrences.forEach(counts::put);
+      }
       ObjectNode files = node.putObject("files");
       files.put("total", hit.size() + miss.size() + unresolved.size());
       files.put("hit", hit.size());
@@ -349,10 +364,25 @@ public final class HuntPass {
         miss.add(path);
       }
     }
+    // The same fail-closed reading the plan path and ScanPass use: a summary that does not PROVE
+    // zero delete files is delete-bearing. The index counted raw rows, so on such a snapshot a hit
+    // is a file that held the term, not a file that still returns it.
+    String confidence = ScanPass.deleteBearing(current) ? "advisory" : "exact";
+    // A count is printed only when it is a count. After a file leaves the table, total_count still
+    // carries its occurrences and nothing can subtract them (FORMAT.md §5.6), so the field is
+    // omitted rather than shown as an upper bound; the summary's counts_exact says why.
+    Map<String, Long> occurrences = null;
+    if (index.countsExact()) {
+      occurrences = new java.util.LinkedHashMap<>();
+      for (String token : all) {
+        TermIndex.Entry entry = entries.get(token);
+        occurrences.put(token, entry == null ? 0L : entry.totalCount());
+      }
+    }
     return new Partition(
         table.name(), column, new ArrayList<>(all), ruleId, fields, expr, null, hit, miss,
         unresolved, current.snapshotId(), index.snapshotId(), index.analyzer(),
-        index.countsExact(), index.partial());
+        index.countsExact(), index.partial(), confidence, occurrences);
   }
 
   /**
