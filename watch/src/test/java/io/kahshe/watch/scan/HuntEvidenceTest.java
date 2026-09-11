@@ -46,7 +46,7 @@ class HuntEvidenceTest {
     BuildConfig config = LocalTableFixture.config();
     Table table = LocalTableFixture.createTable(tmp, "alpha needle", "bravo");
     IndexBuilder.buildColumn(table, COLUMN, config);
-    HuntPass.Partition before = hunt(config).hunt(table, COLUMN, "needle");
+    HuntPass.Result before = hunt(config).hunt(table, COLUMN, "needle");
     assertEquals("exact", before.confidence(),
         "precondition: an append-only snapshot proves total-delete-files = 0");
     assertEquals("0", table.currentSnapshot().summary().get("total-delete-files"));
@@ -57,7 +57,7 @@ class HuntEvidenceTest {
     assertEquals("1", table.currentSnapshot().summary().get("total-delete-files"),
         "precondition: the snapshot now carries a delete file");
 
-    HuntPass.Partition after = hunt(config).hunt(table, COLUMN, "needle");
+    HuntPass.Result after = hunt(config).hunt(table, COLUMN, "needle");
     assertEquals(List.of(dataFile), after.hit(),
         "the file still holds the term in its raw rows, so the index still says hit");
     assertEquals("advisory", after.confidence(),
@@ -79,7 +79,7 @@ class HuntEvidenceTest {
     table.refresh();
     IndexBuilder.buildColumn(table, COLUMN, config);
 
-    HuntPass.Partition exact = hunt(config).hunt(table, COLUMN, "needle");
+    HuntPass.Result exact = hunt(config).hunt(table, COLUMN, "needle");
     assertTrue(exact.countsExact(), "precondition: nothing has left the table");
     assertEquals(Map.of("needle", 3L), exact.occurrences(),
         "two occurrences in one file and one in the other, across every covered file");
@@ -93,7 +93,7 @@ class HuntEvidenceTest {
     table.refresh();
     IndexBuilder.buildColumn(table, COLUMN, config);
 
-    HuntPass.Partition inexact = hunt(config).hunt(table, COLUMN, "needle");
+    HuntPass.Result inexact = hunt(config).hunt(table, COLUMN, "needle");
     assertFalse(inexact.countsExact(), "precondition: a file left, so the counts are not exact");
     assertNull(inexact.occurrences(), "an upper bound must not be printed as a count");
     assertNull(inexact.toJson().get("occurrences"));

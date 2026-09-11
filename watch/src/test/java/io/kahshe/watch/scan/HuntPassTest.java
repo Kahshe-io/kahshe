@@ -81,7 +81,7 @@ class HuntPassTest {
     String later = LocalTableFixture.appendFile(table, "f2.parquet", "charlie " + NEEDLE);
     table.refresh();
 
-    HuntPass.Partition p = new HuntPass(reader(config)).hunt(table, COLUMN, NEEDLE);
+    HuntPass.Result p = new HuntPass(reader(config)).hunt(table, COLUMN, NEEDLE);
 
     assertEquals(List.of(covered), p.hit(),
         "only the file the index actually read may be a hit");
@@ -108,7 +108,7 @@ class HuntPassTest {
     String later = LocalTableFixture.appendFile(table, "f2.parquet", "charlie " + NEEDLE);
     table.refresh();
 
-    HuntPass.Partition p = new HuntPass(reader(config)).hunt(table, COLUMN, NEEDLE);
+    HuntPass.Result p = new HuntPass(reader(config)).hunt(table, COLUMN, NEEDLE);
 
     assertTrue(p.hit().isEmpty(), "nothing the index read holds the term");
     assertEquals(List.of(covered), p.miss(),
@@ -133,7 +133,7 @@ class HuntPassTest {
     IndexBuilder.buildColumn(table, COLUMN, config); // covers both files
     TermIndex reader = reader(config);
 
-    HuntPass.Partition p = new HuntPass(reader).hunt(table, COLUMN, NEEDLE);
+    HuntPass.Result p = new HuntPass(reader).hunt(table, COLUMN, NEEDLE);
     List<String> kept = prunerKeeps(table, config, reader, NEEDLE);
 
     assertEquals(kept, p.hit(), "with complete coverage, hit must equal what the pruner keeps");
@@ -167,7 +167,7 @@ class HuntPassTest {
     assertEquals(List.of(later), kept,
         "precondition: the pruner keeps the uncovered file, because it cannot rule it out");
 
-    HuntPass.Partition p = new HuntPass(reader).hunt(table, COLUMN, NEEDLE);
+    HuntPass.Result p = new HuntPass(reader).hunt(table, COLUMN, NEEDLE);
     assertTrue(p.hit().isEmpty(),
         "the hunt reported the pruner's advisory keep as a hit");
     assertEquals(List.of(later), p.unresolved());

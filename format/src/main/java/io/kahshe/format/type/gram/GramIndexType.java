@@ -1,8 +1,7 @@
 package io.kahshe.format.type.gram;
 
-import java.util.ArrayList;
 import java.util.List;
-import org.apache.iceberg.FileScanTask;
+import org.roaringbitmap.RoaringBitmap;
 import io.kahshe.format.IndexPruner;
 import io.kahshe.format.type.IndexType;
 import io.kahshe.format.type.term.TermIndexType;
@@ -45,42 +44,57 @@ public final class GramIndexType implements IndexType {
     return ctx.grams() == null ? null : new Grams(ctx.grams());
   }
 
+  /**
+   * This tier is EXACT over the files it covers, so unlike the bloom it can prove presence as well
+   * as absence — and until the seam had a {@code hits} set to put it in, that proof was computed
+   * and then thrown away, because a kept file and a proven file were the same list entry.
+   */
   @Override
-  public List<FileScanTask> prune(Loaded loaded, Probe probe, List<FileScanTask> tasks) {
+  public Partition partition(Loaded loaded, Probe probe, FileSet files) {
     List<IndexPruner.Candidate> candidates = probe.candidates();
     if (candidates.isEmpty()) {
-      return tasks;
+      return Partition.allUnknown(files);
     }
     IndexPruner.GramProbe[] gramProbes =
         probe.gramProbes().resolve(((Grams) loaded).index(), probe.table(), candidates);
-    List<FileScanTask> kept = new ArrayList<>(tasks.size());
-    for (FileScanTask task : tasks) {
-      if (mightMatch(task, candidates, gramProbes)) {
-        kept.add(task);
+    RoaringBitmap hits = new RoaringBitmap();
+    RoaringBitmap absent = new RoaringBitmap();
+    for (int ordinal : files.inPlay()) {
+      switch (verdict(files.pathOf(ordinal), candidates, gramProbes)) {
+        case HIT -> hits.add(ordinal);
+        case ABSENT -> absent.add(ordinal);
+        case UNKNOWN -> { }
       }
     }
-    return kept;
+    return Partition.of(files, hits, absent);
   }
 
-  private static boolean mightMatch(
-      FileScanTask task, List<IndexPruner.Candidate> candidates,
-      IndexPruner.GramProbe[] gramProbes) {
-    String path = task.file().location();
+  /** One file against the whole conjunction: absent if any clause rules it out, a hit only if
+   * every clause proves it, and unknown the moment one clause cannot say. */
+  private static Verdict verdict(
+      String path, List<IndexPruner.Candidate> candidates, IndexPruner.GramProbe[] gramProbes) {
+    boolean everyClauseProved = true;
     for (int i = 0; i < candidates.size(); i++) {
       IndexPruner.GramProbe gramProbe = gramProbes[i];
       if (gramProbe == null) {
-        continue; // no layer for this candidate: the blooms answered it
+        everyClauseProved = false; // no layer for this candidate: the blooms answered it
+        continue;
       }
       Integer ordinal = gramProbe.loaded().ordinalOf().get(path);
       if (ordinal == null || ordinal < gramProbe.loaded().fromOrdinal()) {
-        continue; // outside the layer's coverage: never prune
+        everyClauseProved = false; // outside the layer's coverage: never prune
+        continue;
       }
       // exact over covered files: a null match is a literal class this layer cannot probe, and
       // a covered file is then kept rather than proved out
-      if (gramProbe.match() != null && !gramProbe.match().contains(ordinal)) {
-        return false;
+      if (gramProbe.match() == null) {
+        everyClauseProved = false;
+      } else if (!gramProbe.match().contains(ordinal)) {
+        return Verdict.ABSENT;
       }
     }
-    return true;
+    return everyClauseProved ? Verdict.HIT : Verdict.UNKNOWN;
   }
+
+  private enum Verdict { HIT, ABSENT, UNKNOWN }
 }

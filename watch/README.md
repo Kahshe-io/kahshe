@@ -376,9 +376,9 @@ file holding a row per conjunct; that a window counts across files, fires once p
 survives a restart by replay, and counts every way it can miss; that a window bound is a literal
 the reader's session zone cannot move, for each kind of time column; that the loader refuses an
 ambiguous rule rather than picking a reading, and still loads every rule the Sigma backend
-generates; and that Iceberg is named by four classes and no others — the reader, its row adapter,
-and the discovery and delivery pollers — checked deny-by-default over every compiled class in the
-module.
+generates; and that Iceberg is named by five classes and no others — the reader, its row adapter,
+the discovery and delivery pollers, and the hunt, which enumerates a table's files for itself —
+checked deny-by-default over every compiled class in the module.
 
 ## Merge-on-read
 

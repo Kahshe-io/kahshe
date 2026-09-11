@@ -490,7 +490,7 @@ is not (`10.0.4.17.1` satisfies it for `10.0.4.17`).
 
 The canonical string form of the value (§6.4) is one term, **exact and
 case-sensitive**; the empty string yields no term. Plain equality and `IN` on such a
-column probe the term tier (`TermIndexType.pruneByValues`), union per literal.
+column probe the term tier (`TermIndexType.partitionByValues`), union per literal.
 
 ### 6.4 Canonical string forms
 

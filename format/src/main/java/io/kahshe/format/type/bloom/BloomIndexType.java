@@ -1,10 +1,9 @@
 package io.kahshe.format.type.bloom;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
-import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Table;
+import org.roaringbitmap.RoaringBitmap;
 import io.kahshe.format.IndexPruner;
 import io.kahshe.format.type.IndexType;
 import io.kahshe.format.type.gram.GramIndex;
@@ -57,28 +56,35 @@ public final class BloomIndexType implements IndexType {
     return ctx.blooms() == null ? null : new Blooms(ctx.blooms(), ctx.grams());
   }
 
+  /**
+   * Absences only, and never a hit: a bloom's positive "means nothing" ({@link NgramBloom}), so
+   * this tier can prove a file out and can never prove one in. Its whole answer is
+   * {@code absent} and {@code unknown} — which is the case that decides the three-way shape,
+   * because a two-way return leaves it spelling "I cannot say" with the same word the exact tiers
+   * use for a proof.
+   */
   @Override
-  public List<FileScanTask> prune(Loaded loaded, Probe probe, List<FileScanTask> tasks) {
+  public Partition partition(Loaded loaded, Probe probe, FileSet files) {
     List<IndexPruner.Candidate> candidates = probe.candidates();
     if (candidates.isEmpty()) {
-      return tasks;
+      return Partition.allUnknown(files);
     }
     Blooms blooms = (Blooms) loaded;
     IndexPruner.GramProbe[] gramProbes =
         probe.gramProbes().resolve(blooms.grams(), probe.table(), candidates);
-    List<FileScanTask> kept = new ArrayList<>(tasks.size());
-    for (FileScanTask task : tasks) {
-      if (mightMatch(blooms.store(), probe.table(), task, candidates, gramProbes)) {
-        kept.add(task);
+    RoaringBitmap absent = new RoaringBitmap();
+    for (int ordinal : files.inPlay()) {
+      if (!mightMatch(
+          blooms.store(), probe.table(), files.pathOf(ordinal), candidates, gramProbes)) {
+        absent.add(ordinal);
       }
     }
-    return kept;
+    return Partition.of(files, new RoaringBitmap(), absent);
   }
 
   private static boolean mightMatch(
-      IndexStore store, Table table, FileScanTask task, List<IndexPruner.Candidate> candidates,
+      IndexStore store, Table table, String path, List<IndexPruner.Candidate> candidates,
       IndexPruner.GramProbe[] gramProbes) {
-    String path = task.file().location();
     for (int i = 0; i < candidates.size(); i++) {
       IndexPruner.Candidate candidate = candidates.get(i);
       IndexPruner.GramProbe gramProbe = gramProbes[i];

@@ -22,8 +22,13 @@ import org.junit.jupiter.api.Test;
  * <p>The claim this pins: the watcher's evaluation path — the rules, the conditions, the windows,
  * the row test, the scanner seam, the sinks — is written against {@link TableView}, {@link Row}
  * and {@link io.kahshe.analysis.ValueKind}, and names no table format at all. Iceberg lives in
- * four classes, and they are listed below by name. If that holds, serving Delta or any other
+ * five classes, and they are listed below by name. If that holds, serving Delta or any other
  * Log-Structured Table is a reader and a type binding, not a rewrite.
+ *
+ * <p>It was four until {@code HuntPass} landed, and the count in this sentence was not updated with
+ * the list — nor did the module README, which still read "four classes" a commit later. The
+ * assertion below was right throughout; only the prose describing it drifted, which is the exact
+ * failure mode a deny-by-default test exists to survive.
  *
  * <p>It is deny-by-default on purpose: every compiled class in the module is checked, so a new
  * scanner or a new rule form is covered the day it is written, without anyone remembering to add
@@ -38,9 +43,9 @@ import org.junit.jupiter.api.Test;
 class PortBoundaryTest {
 
   /**
-   * The only classes allowed to name Iceberg: the reader and its row adapter, plus the discovery
-   * and delivery pollers that talk to the catalog. A second format brings its own; nothing else in
-   * the module may.
+   * The only classes allowed to name Iceberg: the reader and its row adapter, the discovery and
+   * delivery pollers that talk to the catalog, and the hunt, which enumerates a table's files for
+   * itself. A second format brings its own; nothing else in the module may.
    *
    * <p>{@code FileScanContext} must never join it: it is the seam's ARGUMENT, handed to every
    * scanner anyone writes, so an Iceberg type reachable through it makes the seam Iceberg's. What

@@ -139,37 +139,52 @@ public final class IndexPruner {
     IndexType.ReadContext read =
         new IndexType.ReadContext(table, config, metrics, store, gramIndex, termIndex);
 
-    List<FileScanTask> kept = tasks;
+    List<String> paths = new ArrayList<>(tasks.size());
+    for (FileScanTask task : tasks) {
+      paths.add(task.file().location());
+    }
+    IndexType.FileSet files = IndexType.FileSet.of(paths);
+
+    org.roaringbitmap.RoaringBitmap kept = files.inPlay();
     for (IndexType type : IndexTypes.inCostOrder()) {
       // Counted per tier, not just once per plan: which tier did the pruning, and whether a second
       // predicate narrowed anything at all, is otherwise unanswerable from a running process.
-      int before = kept.size();
-      kept = pruneWith(type, read, probe, kept);
-      metrics.prunePass(type.key(), before, kept.size());
+      int before = kept.getCardinality();
+      kept = partitionWith(type, read, probe, files.narrowedTo(kept)).kept();
+      metrics.prunePass(type.key(), before, kept.getCardinality());
     }
 
-    if (kept.size() < tasks.size()) {
-      LOG.info("index pruned {} of {} file-scan-tasks", tasks.size() - kept.size(), tasks.size());
+    // Where the seam's three verdicts collapse into this caller's two. Planning is the one
+    // consumer for which "the index matched it" and "the index has never heard of it" call for
+    // the same action, so it takes kept = hits + unknown and asks no more.
+    List<FileScanTask> survivors = new ArrayList<>(kept.getCardinality());
+    for (int ordinal : kept) {
+      survivors.add(tasks.get(ordinal));
     }
-    return kept;
+    if (survivors.size() < tasks.size()) {
+      LOG.info(
+          "index pruned {} of {} file-scan-tasks", tasks.size() - survivors.size(), tasks.size());
+    }
+    return survivors;
   }
 
   /**
    * One type's turn. A type that cannot be loaded or that fails while answering is treated as
-   * absent, and absence keeps every file -- the same rule each reader applies to a leaf it refuses.
+   * absent, and absence is unknown for every file -- the same rule each reader applies to a leaf
+   * it refuses, and the one the three-way answer now states rather than implies.
    */
-  private static List<FileScanTask> pruneWith(
-      IndexType type, IndexType.ReadContext read, IndexType.Probe probe, List<FileScanTask> tasks) {
+  private static IndexType.Partition partitionWith(
+      IndexType type, IndexType.ReadContext read, IndexType.Probe probe, IndexType.FileSet files) {
     try {
       IndexType.Loaded loaded = type.load(read);
       if (loaded == null) {
-        return tasks;
+        return IndexType.Partition.allUnknown(files);
       }
-      List<FileScanTask> kept = type.prune(loaded, probe, tasks);
-      return kept == null ? tasks : kept;
+      IndexType.Partition answer = type.partition(loaded, probe, files);
+      return answer == null ? IndexType.Partition.allUnknown(files) : answer;
     } catch (RuntimeException e) {
       LOG.warn("index type '{}' failed; keeping every file", type.key(), e);
-      return tasks;
+      return IndexType.Partition.allUnknown(files);
     }
   }
 

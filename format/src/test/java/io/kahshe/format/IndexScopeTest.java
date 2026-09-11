@@ -195,9 +195,9 @@ class IndexScopeTest {
    *
    * <p>{@code aFileOutsideTheScopeIsKeptRatherThanPruned} reads as though it covers this and does
    * not. Its hint is CONTAINS, and {@code IndexPruner.prune} routes CONTAINS to the gram and bloom
-   * layers; only MATCH reaches {@code pruneByTerms}. The term tier's entire out-of-scope guarantee
+   * layers; only MATCH reaches {@code partitionByTerms}. The term tier's entire out-of-scope guarantee
    * is four lines at the {@code outside index coverage: never prune} keep in
-   * {@code TermIndexType.pruneByTerms}, where a file with no ordinal is kept before any bitmap is
+   * {@code TermIndexType.partitionByTerms}, where a file with no ordinal is kept before any bitmap is
    * consulted, and nothing reaches them without a MATCH hint driven through the pruner.
    *
    * <p>That is the one error class this index may never have. The scoped file holds the token; the

@@ -3,7 +3,9 @@ package io.kahshe.watch.scan;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.kahshe.format.type.IndexType;
 import io.kahshe.format.type.term.TermIndex;
+import io.kahshe.format.type.term.TermIndexType;
 import io.kahshe.watch.rules.Conditions;
 import io.kahshe.watch.rules.ConfirmationSql;
 import io.kahshe.watch.rules.WatchRule;
@@ -18,6 +20,7 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Types;
+import org.roaringbitmap.RoaringBitmap;
 
 /**
  * One term, or one rule of the shape the index can answer, evaluated over EVERY data file a table
@@ -25,15 +28,27 @@ import org.apache.iceberg.types.Types;
  * "were we already hit?"
  *
  * <p>The index already knows the answer for the whole table, not only for files that landed after
- * a rule did. What no existing reader exposes is which of its answers are answers at all.
- * {@code IndexPruner.prune} keeps a file the index cannot speak for — one with no ordinal in the
- * coverage list — because for a scan the safe reading of ignorance is "read it"; its result is
- * {@code kept = hit ∪ unresolved} with nothing to tell the two apart. For a hunt that file must be
- * reported as UNRESOLVED: reading it as a hit fabricates evidence, reading it as a miss declares
- * clean what was never examined. So this class does not call the pruner. It resolves each live
- * file's ordinal itself ({@link TermIndex.Loaded#ordinalOf}) and asks the term's bitmap
- * ({@link TermIndex#entriesFor}), exactly as {@code TermIndexType.pruneByTerms} does, and keeps
- * the three verdicts apart.
+ * a rule did. What it does not do is decide what ignorance means. {@code IndexPruner.prune} keeps a
+ * file the index cannot speak for — one with no ordinal in the coverage list — because for a scan
+ * the safe reading of ignorance is "read it", and its result is {@code kept = hit ∪ unresolved}
+ * with nothing to tell the two apart. For a hunt that file must be reported as UNRESOLVED: reading
+ * it as a hit fabricates evidence, reading it as a miss declares clean what was never examined. So
+ * this class does not call the pruner.
+ *
+ * <p>It does, since 2026-09-10, call the same VERDICT RULE the pruner's term tier calls:
+ * {@link TermIndexType#partitionByCoverage} says covered-and-named is a hit, covered-and-not is a
+ * proven absence, and uncovered is unknown — and it says it once, for both readers. Until then this class resolved each ordinal and probed each bitmap itself, which is
+ * two copies of a rule that has exactly one safe reading. What stays here is what is genuinely a
+ * hunt's and not the index's: the live-file enumeration below (the table's own list, never the
+ * coverage list — coverage is the thing being checked), the refusals by name, the rule shape, and
+ * the decision that unknown means "must be scanned to be decided".
+ *
+ * <p>The division that split is worth keeping in mind when changing either side: the FETCH belongs
+ * to each caller, because they disagree about failure — the pruner swallows an unreadable leaf and
+ * keeps every file, a hunt refuses by name — while the READING of what was fetched belongs to the
+ * index. {@code HuntPassTest.hitDivergesFromThePrunerWhenCoverageIsPartial} pins that the two
+ * still diverge exactly where coverage ends, which is now a property of one mechanism used two
+ * ways rather than of two mechanisms agreeing.
  *
  * <p>A rule is admitted only in the shape {@link WatchRule#ridesIndex} names — one column, token
  * fields, one field or {@code any-of} over several — and the reason for a refusal is the one that
@@ -50,8 +65,8 @@ import org.apache.iceberg.types.Types;
  *
  * <p>It never alerts. A hunt over history claiming (rule, file) through
  * {@link io.kahshe.watch.Alerts} would silence the live watcher on every file it touched. Its
- * output is a result set — {@link Partition#writeJsonl} — carrying, when asked, the SQL an
- * operator runs to see the rows ({@link Partition#withConfirmationSql}): over the hits and the
+ * output is a result set — {@link Result#writeJsonl} — carrying, when asked, the SQL an
+ * operator runs to see the rows ({@link Result#withConfirmationSql}): over the hits and the
  * unresolved files, never a miss, and never executed here.
  *
  * <p>On the port boundary with {@link ScanPass}, and for the same reason: this is the reader that
@@ -79,7 +94,7 @@ public final class HuntPass {
    * @param terms the tokens probed, under the index's analyzer, in field order
    * @param rule the rule's id when a rule was hunted; null for a single term
    * @param fields the fields as asked — one MATCH field for a single term, the rule's own
-   *     otherwise — kept so the confirmation SQL asks the same question the partition answered
+   *     otherwise — kept so the confirmation SQL asks the same question the result answered
    * @param expr the condition over {@code fields}, the tree {@link Conditions#eval} decided with
    * @param confirmationSql the query that shows the rows, or null until
    *     {@link #withConfirmationSql} sets it — and null after it when no file can hold a row
@@ -105,7 +120,7 @@ public final class HuntPass {
    *     dictionary's {@code total_count} — present only when the index's counts are exact
    *     ({@code counts-exact}, FORMAT.md §5.6); absent rather than an upper bound labelled a count
    */
-  public record Partition(
+  public record Result(
       String table,
       String column,
       List<String> terms,
@@ -123,7 +138,7 @@ public final class HuntPass {
       boolean partial,
       String confidence,
       Map<String, Long> occurrences) {
-    public Partition {
+    public Result {
       terms = List.copyOf(terms);
       occurrences = occurrences == null ? null : Map.copyOf(occurrences);
       fields = List.copyOf(fields);
@@ -145,7 +160,7 @@ public final class HuntPass {
      * @param namespace the table's namespace as the engine addresses it
      * @param tableName the table's name as the engine addresses it
      */
-    public Partition withConfirmationSql(String catalog, String namespace, String tableName) {
+    public Result withConfirmationSql(String catalog, String namespace, String tableName) {
       List<String> candidates = new ArrayList<>(hit);
       candidates.addAll(unresolved);
       candidates.sort(null);
@@ -153,7 +168,7 @@ public final class HuntPass {
           ? null
           : ConfirmationSql.hunt(
               catalog, namespace, tableName, snapshotId, candidates, fields, Set.of(), expr);
-      return new Partition(table, column, terms, rule, fields, expr, sql, hit, miss, unresolved,
+      return new Result(table, column, terms, rule, fields, expr, sql, hit, miss, unresolved,
           snapshotId, indexSnapshotId, analyzer, countsExact, partial, confidence, occurrences);
     }
 
@@ -238,26 +253,26 @@ public final class HuntPass {
   }
 
   /**
-   * Partitions the table's live data files by whether {@code value}, as one term under the
+   * Results the table's live data files by whether {@code value}, as one term under the
    * index's analyzer, is in each of them.
    *
    * @throws Refused rather than answering approximately — see the class comment for the cases
    */
-  public Partition hunt(Table table, String column, String value) {
-    return partition(
+  public Result hunt(Table table, String column, String value) {
+    return lookup(
         table, column,
         List.of(new WatchRule.Field(column, WatchRule.Op.MATCH, List.of(value))),
         new WatchRule.Expr.FieldRef(0), null);
   }
 
   /**
-   * Partitions the table's live data files by whether {@code rule}'s condition holds of each —
+   * Results the table's live data files by whether {@code rule}'s condition holds of each —
    * one verdict per field from that field's tokens' bitmaps, joined by the rule's own tree.
    *
    * @throws Refused for any shape the index cannot answer exactly, naming it: the reason
    *     {@link WatchRule#whyNotRidesIndex} gives, or {@code contains}, or {@code min_count}
    */
-  public Partition hunt(Table table, WatchRule rule) {
+  public Result hunt(Table table, WatchRule rule) {
     String why = rule.whyNotRidesIndex();
     if (why != null) {
       throw new Refused("rule " + rule.id() + " cannot be answered from the index alone: " + why);
@@ -277,7 +292,7 @@ public final class HuntPass {
           "rule " + rule.id() + " sets min_count " + rule.minCount()
               + ": the dictionary records which files hold a term, not how many times each");
     }
-    return partition(table, rule.column(), rule.where(), rule.expr(), rule.id());
+    return lookup(table, rule.column(), rule.where(), rule.expr(), rule.id());
   }
 
   /**
@@ -285,7 +300,7 @@ public final class HuntPass {
    * field is satisfied by a file when ANY of its values' bitmaps holds the file's ordinal — a
    * field's values are OR'ed by the rule's contract — and {@code expr} joins the fields.
    */
-  private Partition partition(
+  private Result lookup(
       Table table, String column, List<WatchRule.Field> fields, WatchRule.Expr expr,
       String ruleId) {
     Snapshot current = table.currentSnapshot();
@@ -337,22 +352,41 @@ public final class HuntPass {
       throw new Refused("term index unreadable for column " + column + ": " + e.getMessage(), e);
     }
 
+    // The verdict rule is the index's, not this class's: TermIndexType.partitionByCoverage decides
+    // covered-and-named = HIT, covered-and-not = ABSENT, uncovered = UNKNOWN, and it is the same
+    // call the plan path's term tier makes. What differs here is only what the three are used FOR.
+    IndexType.FileSet files = IndexType.FileSet.of(liveDataFiles(table, current));
+    Map<String, IndexType.Partition> perToken = new java.util.LinkedHashMap<>();
+    for (String token : all) {
+      TermIndex.Entry entry = entries.get(token);
+      perToken.put(
+          token,
+          TermIndexType.partitionByCoverage(
+              files, index, entry == null ? new RoaringBitmap() : entry.ordinals()));
+    }
+    // What was never examined is a property of the coverage alone, not of any token, so it is asked
+    // for as such: probing the empty posting set makes every covered file a proven absence and
+    // leaves exactly the uncovered ones unknown. Reading it off one of the token partitions would
+    // give the same answer and would depend on there being a token to read it from.
+    RoaringBitmap unexamined =
+        TermIndexType.partitionByCoverage(files, index, new RoaringBitmap()).unknown();
+
     List<String> hit = new ArrayList<>();
     List<String> miss = new ArrayList<>();
     List<String> unresolved = new ArrayList<>();
     boolean[] hits = new boolean[tokensPerField.size()];
-    for (String path : liveDataFiles(table, current)) {
-      Integer ordinal = index.ordinalOf().get(path);
-      if (ordinal == null) {
+    for (int ordinal : files.inPlay()) {
+      String path = files.pathOf(ordinal);
+      if (unexamined.contains(ordinal)) {
         unresolved.add(path); // outside coverage: not examined, so not a miss either
         continue;
       }
       for (int i = 0; i < hits.length; i++) {
         hits[i] = false;
         for (String token : tokensPerField.get(i)) {
-          // Absent from the dictionary means absent from every COVERED file — and only those.
-          TermIndex.Entry entry = entries.get(token);
-          if (entry != null && entry.ordinals().contains(ordinal)) {
+          // A field's values are OR'ed by the rule's contract. Absent from the dictionary means
+          // absent from every COVERED file — and only those, which the partition has already said.
+          if (perToken.get(token).hits().contains(ordinal)) {
             hits[i] = true;
             break;
           }
@@ -379,7 +413,7 @@ public final class HuntPass {
         occurrences.put(token, entry == null ? 0L : entry.totalCount());
       }
     }
-    return new Partition(
+    return new Result(
         table.name(), column, new ArrayList<>(all), ruleId, fields, expr, null, hit, miss,
         unresolved, current.snapshotId(), index.snapshotId(), index.analyzer(),
         index.countsExact(), index.partial(), confidence, occurrences);

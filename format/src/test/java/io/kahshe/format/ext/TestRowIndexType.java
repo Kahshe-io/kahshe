@@ -3,7 +3,7 @@ package io.kahshe.format.ext;
 import io.kahshe.format.type.IndexType;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.apache.iceberg.FileScanTask;
+import org.roaringbitmap.RoaringBitmap;
 
 /**
  * A fourth index type registered only for the format module's tests, through
@@ -88,7 +88,7 @@ public final class TestRowIndexType implements IndexType {
 
   /** Never reached: an absent type is not asked. Reaching it would prune the whole plan. */
   @Override
-  public List<FileScanTask> prune(Loaded loaded, Probe probe, List<FileScanTask> tasks) {
-    return List.of();
+  public Partition partition(Loaded loaded, Probe probe, FileSet files) {
+    return new Partition(new RoaringBitmap(), files.inPlay(), new RoaringBitmap());
   }
 }

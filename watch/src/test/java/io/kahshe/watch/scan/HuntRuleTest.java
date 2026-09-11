@@ -201,7 +201,7 @@ class HuntRuleTest {
     union.addAll(hunt.hunt(table, COLUMN, "bravo").hit());
     assertEquals(2, union.size(), "precondition: the two tokens are in two different files");
 
-    HuntPass.Partition p = hunt.hunt(table,
+    HuntPass.Result p = hunt.hunt(table,
         single(List.of("alpha", "bravo"), List.of(), WatchRule.Condition.ANY_OF, 1));
     assertEquals(List.copyOf(union), p.hit(), "any-of is the union of its tokens' files");
     assertEquals(1, p.miss().size(), "the file holding neither token is a miss");
@@ -210,7 +210,7 @@ class HuntRuleTest {
     // And the uncovered file lands where it does for one token: nowhere but unresolved.
     String later = LocalTableFixture.appendFile(table, "f4.parquet", "alpha");
     table.refresh();
-    HuntPass.Partition after = new HuntPass(reader(config)).hunt(table,
+    HuntPass.Result after = new HuntPass(reader(config)).hunt(table,
         single(List.of("alpha", "bravo"), List.of(), WatchRule.Condition.ANY_OF, 1));
     assertEquals(List.of(later), after.unresolved());
     assertEquals(p.hit(), after.hit(), "an uncovered file is not a hit however many tokens ask");

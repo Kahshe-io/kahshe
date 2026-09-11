@@ -26,10 +26,11 @@ The direction matters and is not symmetric. Keeping a file that holds no match c
 a file that does hold one is a wrong answer with nothing to indicate it happened. So every failure
 mode resolves toward keeping:
 
-- A file outside a tier's coverage is kept by that tier.
+- A file outside a tier's coverage is `unknown` to that tier, and every caller keeps what it cannot
+  rule out. The seam names that verdict rather than leaving it to be inferred from a survivor list.
 - A metadata document that cannot be read, or whose version is newer than this reader, means the
   tier is **absent** — not empty. Absence keeps every file, loudly.
-- An index type that throws while answering is treated as absent (`IndexPruner.pruneWith`), and the
+- An index type that throws while answering is treated as absent (`IndexPruner.partitionWith`), and the
   rest of the plan proceeds.
 - A leaf that will not fit the cache budget is refused **before** it is opened, since loading it and
   then refusing would already have paid the cost being avoided.
@@ -75,8 +76,24 @@ IndexPruner.prune(table, filter, hints, tasks)
   │
   └─ for each IndexType in IndexTypes.inCostOrder():
          type.load(ReadContext)  →  null means absent, keep everything
-         type.prune(loaded, Probe, tasks)
+         type.partition(loaded, Probe, FileSet)
+              → Partition { hits, absent, unknown } over plan ordinals
+         kept = hits ∪ unknown, handed to the next tier
 ```
+
+A tier answers in **plan ordinals** — positions in the caller's own file list — and returns three
+sets rather than the survivors. Only `absent` may cost a file its place; `unknown` is where every
+failure lands, and each caller decides what it means. Planning is the one caller for which a file
+the index MATCHED and a file it has never heard of call for the same action, so `IndexPruner`
+collapses the two and returns scan tasks; a caller that must tell them apart (a retroactive hunt
+cannot report an unexamined file as a hit) reads the partition instead. The bloom tier is the proof
+the answer needs three words and not two: with no false negatives it can populate `absent` and can
+never populate `hits`, so a two-way return would have it spelling "I cannot say" with the word the
+exact tiers use for a proof.
+
+Iceberg's scan-planning vocabulary lives in `IndexPruner` alone, which is the sole translation
+point between plan ordinals and `FileScanTask`s — enforced by `QueryApiBoundaryTest`, deny-by-default
+over the module's compiled classes.
 
 Literals are converted to the canonical form the build wrote (`Canonical.form`, keyed by
 `IcebergKinds.of` — a bigint's decimal text, a UUID's undashed hex, a binary's hex). A literal in a

@@ -32,7 +32,7 @@ class HuntResultTest {
   private static final String COLUMN = LocalTableFixture.COLUMN;
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  private static List<JsonNode> lines(HuntPass.Partition p) throws Exception {
+  private static List<JsonNode> lines(HuntPass.Result p) throws Exception {
     StringBuilder sb = new StringBuilder();
     p.writeJsonl(sb);
     List<JsonNode> out = new ArrayList<>();
@@ -59,7 +59,7 @@ class HuntResultTest {
     IndexBuilder.buildColumn(table, COLUMN, config);
     String later = LocalTableFixture.appendFile(table, "f3.parquet", "charlie needle");
     table.refresh();
-    HuntPass.Partition p =
+    HuntPass.Result p =
         new HuntPass(new TermIndex(config.format(), new Metrics())).hunt(table, COLUMN, "needle");
     assertEquals(1, p.hit().size());
     assertEquals(1, p.miss().size());
@@ -131,11 +131,11 @@ class HuntResultTest {
     table.refresh();
     HuntPass hunt = new HuntPass(new TermIndex(config.format(), new Metrics()));
 
-    HuntPass.Partition bare = hunt.hunt(table, COLUMN, "needle");
+    HuntPass.Result bare = hunt.hunt(table, COLUMN, "needle");
     assertNull(bare.confirmationSql(), "not asked for, not built");
     assertNull(bare.toJson().get("confirmation_sql"));
 
-    HuntPass.Partition p = bare.withConfirmationSql("iceberg", "logs", "t");
+    HuntPass.Result p = bare.withConfirmationSql("iceberg", "logs", "t");
     String sql = p.confirmationSql();
     assertTrue(sql.contains("FOR VERSION AS OF " + p.snapshotId()), sql);
     assertTrue(sql.contains(p.hit().get(0)), "the hit is pinned: " + sql);
@@ -147,11 +147,11 @@ class HuntResultTest {
     assertEquals(sql, lines(p).get(0).get("confirmation_sql").asText());
 
     // Nothing to confirm: no hit and no unresolved file leaves the SQL null, not a table scan.
-    HuntPass.Partition none = hunt.hunt(table, COLUMN, "zzzabsentzzz");
+    HuntPass.Result none = hunt.hunt(table, COLUMN, "zzzabsentzzz");
     assertEquals(1, none.unresolved().size(), "precondition: the uncovered file is unresolved");
     Table fullyCovered = LocalTableFixture.createTable(tmp.resolve("two"), "alpha");
     IndexBuilder.buildColumn(fullyCovered, COLUMN, config);
-    HuntPass.Partition covered = new HuntPass(new TermIndex(config.format(), new Metrics()))
+    HuntPass.Result covered = new HuntPass(new TermIndex(config.format(), new Metrics()))
         .hunt(fullyCovered, COLUMN, "zzz");
     assertTrue(covered.hit().isEmpty() && covered.unresolved().isEmpty(),
         "precondition: every file covered, none holds the term");

@@ -123,7 +123,7 @@ public final class Kahshe {
       Metrics cliMetrics = new Metrics();
       HuntPass hunt = new HuntPass(new TermIndex(config.format(), cliMetrics));
       try {
-        HuntPass.Partition result;
+        HuntPass.Result result;
         if (byRule) {
           // The rule is the whole specification -- it names its prefix and table -- and it is
           // read through the loader the watcher uses, so a rule this refuses is one the watcher

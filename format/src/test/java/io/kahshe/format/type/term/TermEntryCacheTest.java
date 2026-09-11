@@ -21,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
  * cached ABSENCE.
  *
  * <p>A token with no entry does not mean "unknown", it means "no file holds this term" — and
- * {@code TermIndexType.pruneByTerms} turns that into dropping every file. So a negative that outlives
+ * {@code TermIndexType.partitionByTerms} turns that into dropping every file. So a negative that outlives
  * the bytes it was read from is a false negative: rows missing from someone's answer, no exception,
  * no metric. That is the one error class this index may never have.
  *
